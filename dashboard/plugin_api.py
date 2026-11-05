@@ -3,9 +3,11 @@
 The Desktop pane talks to these routes through ``ctx.rest``. Every route is a thin
 wrapper over the same engine the tools and the hook use, so the pane can never
 disagree with what the agent sees.
-"""
 
-from __future__ import annotations
+Annotated eagerly (no ``from __future__ import annotations``): the dashboard imports
+this file through ``spec_from_file_location``, where Pydantic cannot resolve
+stringified annotations, so the ``RepairRequest`` body model must be a real object.
+"""
 
 import sys
 from pathlib import Path
