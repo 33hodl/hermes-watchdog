@@ -1,0 +1,122 @@
+"""Durable repair ledger — one row per repair attempt, in the plugin's own DB.
+
+The ledger is what makes the plugin honest: a repair that "worked" is a row with an
+outcome, and a bounded number of attempts per incident per day stops a repair loop
+from becoming a second failure mode. It also feeds the pane's recent-activity list.
+"""
+
+from __future__ import annotations
+
+import logging
+import sqlite3
+import time
+from typing import Any, Dict, List, Optional
+
+log = logging.getLogger(__name__)
+
+PLUGIN_ID = "hermes-watchdog"
+
+_SCHEMA = """
+CREATE TABLE IF NOT EXISTS repairs (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    incident_id TEXT NOT NULL,
+    job_id      TEXT NOT NULL DEFAULT '',
+    job_name    TEXT NOT NULL DEFAULT '',
+    playbook    TEXT NOT NULL DEFAULT '',
+    source      TEXT NOT NULL DEFAULT '',
+    started_at  REAL NOT NULL,
+    finished_at REAL,
+    outcome     TEXT NOT NULL DEFAULT 'running',
+    detail      TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS repairs_incident ON repairs(incident_id, started_at);
+CREATE INDEX IF NOT EXISTS repairs_started ON repairs(started_at);
+"""
+
+
+def _conn() -> sqlite3.Connection:
+    from plugins.plugin_storage import plugin_db
+    conn = plugin_db(PLUGIN_ID)
+    conn.executescript(_SCHEMA)
+    return conn
+
+
+def start_attempt(
+    incident_id: str, job_id: str, job_name: str, playbook: str, source: str,
+) -> int:
+    conn = _conn()
+    cur = conn.execute(
+        "INSERT INTO repairs (incident_id, job_id, job_name, playbook, source, started_at) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (incident_id, job_id, job_name, playbook, source, time.time()),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def finish_attempt(repair_id: int, outcome: str, detail: str = "") -> None:
+    conn = _conn()
+    conn.execute(
+        "UPDATE repairs SET finished_at = ?, outcome = ?, detail = ? WHERE id = ?",
+        (time.time(), outcome, detail[:2000], repair_id),
+    )
+    conn.commit()
+
+
+def attempts_today(incident_id: str) -> int:
+    """Attempts for this incident in the last 24h — the budget the playbook author set."""
+    conn = _conn()
+    row = conn.execute(
+        "SELECT COUNT(*) FROM repairs WHERE incident_id = ? AND started_at >= ?",
+        (incident_id, time.time() - 86400),
+    ).fetchone()
+    return int(row[0]) if row else 0
+
+
+def recent(limit: int = 20) -> List[Dict[str, Any]]:
+    conn = _conn()
+    rows = conn.execute(
+        "SELECT incident_id, job_id, job_name, playbook, source, started_at, finished_at, "
+        "outcome, detail FROM repairs ORDER BY started_at DESC LIMIT ?",
+        (max(1, min(int(limit), 200)),),
+    ).fetchall()
+    return [_row_view(r) for r in rows]
+
+
+def _row_view(row) -> Dict[str, Any]:
+    return {
+        "incident_id": row[0],
+        "job_id": row[1],
+        "job_name": row[2],
+        "playbook": row[3],
+        "source": row[4],
+        "started_at": row[5],
+        "finished_at": row[6],
+        "outcome": row[7],
+        "detail": row[8],
+    }
+
+
+def summary() -> Dict[str, Any]:
+    """Counts for the pane header: repaired / failed in the last 7 days."""
+    conn = _conn()
+    since = time.time() - 7 * 86400
+    out: Dict[str, Any] = {"repaired_7d": 0, "failed_7d": 0, "escalated_7d": 0}
+    for outcome, key in (("repaired", "repaired_7d"), ("failed", "failed_7d"), ("escalated", "escalated_7d")):
+        row = conn.execute(
+            "SELECT COUNT(*) FROM repairs WHERE outcome = ? AND started_at >= ?", (outcome, since),
+        ).fetchone()
+        out[key] = int(row[0]) if row else 0
+    row = conn.execute("SELECT MAX(started_at) FROM repairs").fetchone()
+    out["last_attempt_at"] = row[0] if row else None
+    return out
+
+
+def last_attempt_for(incident_id: str) -> Optional[Dict[str, Any]]:
+    conn = _conn()
+    row = conn.execute(
+        "SELECT incident_id, job_id, job_name, playbook, source, started_at, finished_at, "
+        "outcome, detail FROM repairs WHERE incident_id = ? ORDER BY started_at DESC LIMIT 1",
+        (incident_id,),
+    ).fetchone()
+    return _row_view(row) if row else None

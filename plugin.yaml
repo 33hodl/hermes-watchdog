@@ -1,0 +1,14 @@
+name: hermes-watchdog
+version: 0.1.0
+description: "Cron jobs that fix themselves: playbook repairs, verification and an incident ledger instead of repeated failure pings."
+author: 33hodl
+license: MIT
+homepage: https://github.com/33hodl/hermes-watchdog
+requires_hermes: ">=0.22"
+tags: [cron, reliability, automation, incident, ops]
+provides_tools:
+  - watchdog_status
+  - watchdog_repair
+  - watchdog_runbooks
+provides_hooks:
+  - on_session_end
