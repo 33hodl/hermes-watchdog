@@ -24,9 +24,10 @@ not "here is a JSON payload".
 1. Your scheduled job failed at three in the morning. Nobody saw it. You found out four days later, when the numbers were already missing.
 2. Watchdog notices. It picks a fix that matches the failure, and runs it: retry the job, restart what broke, or pause it so it stops burning the schedule.
 3. Then it checks Hermes's own record to see whether the next run actually worked.
-4. If it worked, you hear nothing at all. If it didn't, you get the failure, the fix it tried, and what's left for you to do.
-5. A repair only counts when the next run succeeds. You're not trusting a retry that quietly failed again.
-6. You stop being the retry button for your own automations. One command to install. Free, open source, no API keys. Links below.
+4. And it's a page in Hermes Desktop, not a log file. What's open, the fix it tried, and what it fixed.
+5. If it worked, you hear nothing at all. If it didn't, you get the failure, the fix it tried, and what's left for you to do.
+6. A repair only counts when the next run succeeds. You're not trusting a retry that quietly failed again.
+7. You stop being the retry button for your own automations. One command to install. Free, open source, no API keys. Links below.
 
 Voice: Microsoft multilingual neural (`en-US-AvaMultilingualNeural`), the most
 natural free option that needs no account. ElevenLabs free tier sounds better
@@ -37,14 +38,16 @@ still, but it needs the owner's account and API key (10k characters/month).
 `wd-video/build2.py` renders each beat as a card (headless Chrome screenshot of
 plain-language text), then muxes the narration with ffmpeg. The technical line in
 the "proof" card is copied from a real repair cycle on this machine, not invented.
-It is not a screen capture of the Desktop app: the app runs on the owner's Mac and
-the build host is a headless VPS.
+The Desktop beat is a real screenshot of the product (the `/watchdog` page on the
+owner's Mac) shown at native pixel size and drifting slowly, not a mock: the app
+runs on the owner's Mac, so the build host cannot record live footage.
 
 ## Assets
 
-- video: `hermes-watchdog-demo-v2.mp4` (52s, 1440x900)
-- narration: `audio-v2/s1..s6.mp3`
-- scene text: `scenes2.json`
+- video: `hermes-watchdog-demo-v3.mp4` (60s, 1440x900)
+- narration: `audio-v3/s1..s6.mp3` + `audio-v3/ui.mp3`
+- scene text: `scenes3.json`, rendered by `wd-video/build3.py`
+- still used for the Desktop beat: `shots/ui-page-frame.png`
 
 ## Submission form
 
