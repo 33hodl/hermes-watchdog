@@ -31,7 +31,8 @@ hard daily attempt budget per incident, so it cannot become a second failure mod
 | `watchdog_runbooks` tool | List the playbooks in force, or save a new one |
 | `on_session_end` hook | When a *cron* turn fails, repair that job in place before the next tick |
 | `/watchdog` command | `/watchdog` for the fleet, `/watchdog repair` to run the cycle |
-| Desktop pane + chip | Watchdog pane (right zone) and a status-bar health chip, per-incident Repair buttons |
+| Sidebar page | **Watchdog** row in the sidebar nav → full-width fleet view (`/watchdog`), works on every layout |
+| Desktop pane + chip | Optional docked pane (right zone) and a status-bar health chip with live incident count |
 | Bundled skill | `hermes-watchdog:watchdog` — how to read the fleet and author playbooks |
 
 ## Verification is the point

@@ -1,10 +1,12 @@
 /**
- * Watchdog — Desktop half.
+ * Hermes Watchdog — Desktop half.
  *
- * A pane and a status-bar chip over the plugin's own backend
- * (`ctx.rest` → /api/plugins/hermes-watchdog/*), which is the same engine the
- * `watchdog_status` / `watchdog_repair` tools and the on_session_end hook use.
- * Nothing here talks to Hermes internals directly.
+ * Three surfaces over the plugin's own backend (`ctx.rest` -> /api/plugins/hermes-watchdog/*),
+ * which is the same engine the `watchdog_status` / `watchdog_repair` tools and the
+ * `on_session_end` hook use. Nothing here talks to Hermes internals directly.
+ *
+ * The sidebar page is the primary door: a docked `panes` contribution only shows in a
+ * layout that has a right zone, so the page route works on every layout.
  */
 
 import {
@@ -15,20 +17,23 @@ import {
   GlyphSpinner,
   ScrollArea,
   StatusDot,
-  Tip,
   cn,
   host,
   useQuery,
-  useQueryClient,
-  useValue
+  useQueryClient
 } from '@hermes/plugin-sdk'
 import { jsx, jsxs } from 'react/jsx-runtime'
+
+const ROUTES_AREA = 'routes'
+const SIDEBAR_NAV_AREA = 'sidebar.nav'
+const PAGE_PATH = '/watchdog'
 
 const TONE = { ok: 'good', degraded: 'warn', critical: 'bad', unknown: 'muted' }
 const HEALTH_LABEL = { ok: 'healthy', degraded: 'degraded', critical: 'critical', unknown: 'no data' }
 const OUTCOME_TONE = { repaired: 'good', failed: 'bad', escalated: 'warn', running: 'muted' }
 
 const POLL_MS = 15000
+const KEY = ['hermes-watchdog', 'status']
 
 function relative(ts) {
   if (!ts) {
@@ -38,53 +43,48 @@ function relative(ts) {
   const seconds = Math.max(0, Math.round(Date.now() / 1000 - Number(ts)))
 
   if (seconds < 60) {
-    return `${seconds}s ago`
+    return seconds + 's ago'
   }
 
   if (seconds < 3600) {
-    return `${Math.round(seconds / 60)}m ago`
+    return Math.round(seconds / 60) + 'm ago'
   }
 
   if (seconds < 86400) {
-    return `${Math.round(seconds / 3600)}h ago`
+    return Math.round(seconds / 3600) + 'h ago'
   }
 
-  return `${Math.round(seconds / 86400)}d ago`
+  return Math.round(seconds / 86400) + 'd ago'
 }
 
-function Row({ children, className }) {
-  return jsx('div', {
-    className: cn('flex items-start gap-2 px-3 py-2', className),
-    children
-  })
-}
-
-function Chip({ rest }) {
-  const { data } = useQuery({
-    enabled: Boolean(rest),
-    queryFn: () => rest('/status'),
-    queryKey: ['hermes-watchdog', 'status'],
+function useWatchdog(ctx) {
+  return useQuery({
+    enabled: Boolean(ctx && ctx.rest),
+    queryFn: () => ctx.rest('/status'),
+    queryKey: KEY,
     refetchInterval: POLL_MS,
     retry: false
   })
-  const incidents = data?.counts?.open_incidents ?? 0
-  const health = data?.health ?? 'unknown'
+}
 
-  return jsx(Tip, {
-    label: `${incidents} open cron incident${incidents === 1 ? '' : 's'} · ${HEALTH_LABEL[health]}`,
-    children: jsxs('span', {
-      className: cn('inline-flex h-full items-center gap-1 px-1.5 text-[0.6875rem]', 'text-(--ui-text-tertiary)'),
-      children: [
-        jsx(StatusDot, { tone: TONE[health] ?? 'muted' }),
-        jsx('span', { children: incidents > 0 ? `watchdog ${incidents}` : 'watchdog' })
-      ]
-    })
+function Chip({ ctx }) {
+  const { data } = useWatchdog(ctx)
+  const incidents = (data && data.counts && data.counts.open_incidents) || 0
+  const health = (data && data.health) || 'unknown'
+
+  return jsxs('span', {
+    className: cn('inline-flex h-full items-center gap-1 px-1.5 text-[0.6875rem]', 'text-(--ui-text-tertiary)'),
+    children: [
+      jsx(StatusDot, { tone: TONE[health] || 'muted' }),
+      jsx('span', { children: incidents > 0 ? 'watchdog ' + incidents : 'watchdog' })
+    ]
   })
 }
 
-function IncidentRow({ incident, onRepair, busy }) {
-  return jsxs(Row, {
-    className: 'border-b border-(--ui-stroke-secondary)/40 last:border-b-0',
+function IncidentRow({ incident, onRepair, busy, compact }) {
+  return jsxs('div', {
+    className: cn('flex items-start gap-2 border-b border-(--ui-stroke-secondary)/40 px-3 last:border-b-0',
+      compact ? 'py-2' : 'py-3'),
     children: [
       jsx(StatusDot, { className: 'mt-1.5', tone: 'bad' }),
       jsxs('div', {
@@ -117,11 +117,12 @@ function IncidentRow({ incident, onRepair, busy }) {
   })
 }
 
-function RepairRow({ repair }) {
-  return jsxs(Row, {
-    className: 'border-b border-(--ui-stroke-secondary)/40 last:border-b-0',
+function RepairRow({ repair, compact }) {
+  return jsxs('div', {
+    className: cn('flex items-start gap-2 border-b border-(--ui-stroke-secondary)/40 px-3 last:border-b-0',
+      compact ? 'py-2' : 'py-3'),
     children: [
-      jsx(StatusDot, { className: 'mt-1.5', tone: OUTCOME_TONE[repair.outcome] ?? 'muted' }),
+      jsx(StatusDot, { className: 'mt-1.5', tone: OUTCOME_TONE[repair.outcome] || 'muted' }),
       jsxs('div', {
         className: 'min-w-0 flex-1',
         children: [
@@ -140,7 +141,7 @@ function RepairRow({ repair }) {
           }),
           jsx('div', {
             className: 'mt-0.5 truncate text-[0.6875rem] text-(--ui-text-tertiary)',
-            children: `${repair.playbook} · ${repair.outcome}${repair.detail ? ` — ${repair.detail}` : ''}`
+            children: repair.playbook + ' · ' + repair.outcome + (repair.detail ? ' — ' + repair.detail : '')
           })
         ]
       })
@@ -148,74 +149,87 @@ function RepairRow({ repair }) {
   })
 }
 
-function WatchdogPane({ ctx }) {
-  const client = useQueryClient()
-  const rest = ctx?.rest ? path => ctx.rest(path) : null
-  const { data, error, isFetching, refetch } = useQuery({
-    enabled: Boolean(rest),
-    queryFn: () => rest('/status'),
-    queryKey: ['hermes-watchdog', 'status'],
-    refetchInterval: POLL_MS,
-    retry: false
+function SectionLabel({ children }) {
+  return jsx('div', {
+    className: 'px-3 pt-3 pb-1 text-[0.625rem] font-medium tracking-wide text-(--ui-text-quaternary) uppercase',
+    children
   })
-  const health = data?.health ?? 'unknown'
-  const incidents = data?.incidents ?? []
-  const repairs = data?.recent_repairs ?? []
-  const summary = data?.repairs ?? {}
+}
+
+/** Shared body: the docked pane renders it compact, the sidebar page renders it full width. */
+function WatchdogBody({ ctx, compact }) {
+  const client = useQueryClient()
+  const { data, error, isFetching, refetch } = useWatchdog(ctx)
 
   const run = async (jobId, dryRun) => {
-    if (!ctx?.rest) {
+    if (!ctx || !ctx.rest) {
       return
     }
 
     const report = await ctx
-      .rest('/repair', { body: { dry_run: Boolean(dryRun), job_id: jobId ?? null }, method: 'POST' })
+      .rest('/repair', { body: { dry_run: Boolean(dryRun), job_id: jobId || null }, method: 'POST' })
       .catch(thrown => ({ error: String(thrown) }))
 
-    if (report?.error) {
-      host.notify({ kind: 'error', message: `Hermes Watchdog repair failed: ${report.error}` })
+    if (report && report.error) {
+      host.notify({ kind: 'error', message: 'Hermes Watchdog repair failed: ' + report.error })
 
       return
     }
 
-    const fixed = report.repaired?.length ?? 0
-    const failed = report.failed?.length ?? 0
-    const escalated = report.escalated?.length ?? 0
+    const fixed = (report && report.repaired && report.repaired.length) || 0
+    const failed = (report && report.failed && report.failed.length) || 0
+    const escalated = (report && report.escalated && report.escalated.length) || 0
+    const planned = (report && report.attempts && report.attempts.length) || 0
 
     host.notify({
-      kind: failed > 0 ? 'warning' : 'info',
+      kind: failed > 0 ? 'warning' : 'success',
       message: dryRun
-        ? `Hermes Watchdog plan: ${report.attempts?.length ?? 0} incident(s) would be repaired`
-        : `Hermes Watchdog: ${fixed} repaired, ${failed} failed, ${escalated} need you`
+        ? 'Watchdog plan: ' + planned + ' incident(s) would be repaired'
+        : 'Hermes Watchdog: ' + fixed + ' repaired, ' + failed + ' failed, ' + escalated + ' need you'
     })
-    client.invalidateQueries({ queryKey: ['hermes-watchdog', 'status'] })
+    client.invalidateQueries({ queryKey: KEY })
   }
 
   if (error) {
-    return jsx('div', {
-      className: 'p-3 text-xs text-(--ui-text-tertiary)',
-      children: 'Hermes Watchdog backend unreachable. The plugin is enabled but its API router is not mounted on this gateway.'
+    return jsxs('div', {
+      className: 'p-4 text-xs text-(--ui-text-tertiary)',
+      children: [
+        'Watchdog backend unreachable. The plugin is enabled but its API router is not mounted on this gateway.',
+        jsx('div', {
+          className: 'mt-2 text-(--ui-text-quaternary)',
+          children: 'Restart the gateway (or Hermes Desktop) after installing, then reload this page.'
+        })
+      ]
     })
   }
 
   if (!data) {
     return jsx('div', {
-      className: 'flex h-full items-center justify-center',
+      className: 'flex h-full min-h-40 items-center justify-center',
       children: jsx(GlyphSpinner, {})
     })
   }
 
+  const health = data.health || 'unknown'
+  const incidents = data.incidents || []
+  const repairs = data.recent_repairs || []
+  const summary = data.repairs || {}
+  const counts = data.counts || {}
+
   return jsxs('div', {
-    className: 'flex h-full flex-col',
+    className: 'flex h-full min-h-0 flex-col',
     children: [
       jsxs('div', {
         className: 'flex items-center gap-2 border-b border-(--ui-stroke-secondary) px-3 py-2',
         children: [
-          jsx(StatusDot, { tone: TONE[health] ?? 'muted' }),
-          jsx('span', { className: 'text-xs font-medium text-(--ui-text-primary)', children: HEALTH_LABEL[health] }),
+          jsx(StatusDot, { tone: TONE[health] || 'muted' }),
+          jsx('span', {
+            className: 'text-xs font-medium text-(--ui-text-primary)',
+            children: HEALTH_LABEL[health] || health
+          }),
           jsx('span', {
             className: 'text-[0.6875rem] text-(--ui-text-tertiary)',
-            children: `${data.counts?.jobs ?? 0} jobs · ${incidents.length} open · ${summary.repaired_7d ?? 0} repaired/7d`
+            children: (counts.jobs || 0) + ' jobs · ' + incidents.length + ' open · ' + (summary.repaired_7d || 0) + ' repaired/7d'
           }),
           jsx('span', { className: 'flex-1' }),
           jsx(Button, {
@@ -238,43 +252,58 @@ function WatchdogPane({ ctx }) {
         className: 'min-h-0 flex-1',
         children: jsxs('div', {
           children: [
-            jsx('div', {
-              className: 'px-3 pt-1 pb-1 text-[0.625rem] font-medium tracking-wide text-(--ui-text-quaternary) uppercase',
-              children: 'Open incidents'
-            }),
+            jsx(SectionLabel, { children: 'Open incidents' }),
             incidents.length === 0
-              ? jsx(EmptyState, {
-                  description: 'Every cron job is running clean.',
-                  title: 'Nothing to fix'
-                })
+              ? jsx(EmptyState, { description: 'Every cron job is running clean.', title: 'Nothing to fix' })
               : incidents.map(incident =>
                   jsx(IncidentRow, {
                     busy: isFetching,
+                    compact,
                     incident,
                     key: incident.incident_id,
                     onRepair: jobId => run(jobId, false)
                   })
                 ),
-            jsx('div', {
-              className: 'px-3 pt-3 pb-1 text-[0.625rem] font-medium tracking-wide text-(--ui-text-quaternary) uppercase',
-              children: 'Recent repairs'
-            }),
+            jsx(SectionLabel, { children: 'Recent repairs' }),
             repairs.length === 0
               ? jsx('div', {
                   className: 'px-3 pb-3 text-[0.6875rem] text-(--ui-text-tertiary)',
                   children: 'No repair attempts recorded yet.'
                 })
               : repairs.map(repair =>
-                  jsx(RepairRow, { key: `${repair.incident_id}-${repair.started_at}`, repair })
+                  jsx(RepairRow, { compact, key: repair.incident_id + '-' + repair.started_at, repair })
                 ),
-            data.upstream?.ok === false
+            data.upstream && data.upstream.ok === false
               ? jsx('div', {
                   className: 'px-3 py-2 text-[0.6875rem] text-(--ui-text-quaternary)',
-                  children: `Upstream unavailable: ${(data.upstream.errors || []).join('; ')}`
+                  children: 'Upstream unavailable: ' + ((data.upstream.errors || []).join('; '))
                 })
               : null
           ]
         })
+      })
+    ]
+  })
+}
+
+/** The sidebar page — full width, same report, works on every layout. */
+function WatchdogPage({ ctx }) {
+  return jsxs('div', {
+    className: 'flex h-full min-h-0 flex-col',
+    children: [
+      jsxs('div', {
+        className: 'flex items-baseline gap-2 px-6 pt-5 pb-3',
+        children: [
+          jsx('div', { className: 'text-sm font-semibold text-(--ui-text-primary)', children: 'Hermes Watchdog' }),
+          jsx('div', {
+            className: 'text-[0.6875rem] text-(--ui-text-tertiary)',
+            children: 'cron jobs that fix themselves · repairs verified against Hermes’s own run record'
+          })
+        ]
+      }),
+      jsx('div', {
+        className: 'mx-6 mb-4 min-h-0 flex-1 overflow-hidden rounded-md border border-(--ui-stroke-secondary)',
+        children: jsx(WatchdogBody, { compact: false, ctx })
       })
     ]
   })
@@ -288,7 +317,7 @@ export default {
       area: 'statusBar.right',
       id: 'watchdog-chip',
       order: 120,
-      render: () => jsx(Chip, { rest: ctx.rest ? path => ctx.rest(path) : null })
+      render: () => jsx(Chip, { ctx })
     })
 
     ctx.register({
@@ -300,8 +329,26 @@ export default {
         width: '320px'
       },
       id: 'watchdog',
-      render: () => jsx(WatchdogPane, { ctx }),
+      render: () =>
+        jsx('div', {
+          className: 'flex h-full min-h-0 flex-col',
+          children: jsx(WatchdogBody, { compact: true, ctx })
+        }),
       title: 'Hermes Watchdog'
+    })
+
+    ctx.register({
+      area: ROUTES_AREA,
+      data: { path: PAGE_PATH },
+      id: 'watchdog-page',
+      render: () => jsx(WatchdogPage, { ctx }),
+      title: 'Hermes Watchdog'
+    })
+
+    ctx.register({
+      area: SIDEBAR_NAV_AREA,
+      data: { codicon: 'pulse', label: 'Watchdog', path: PAGE_PATH },
+      id: 'watchdog-nav'
     })
   }
 }
