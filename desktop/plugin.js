@@ -173,7 +173,7 @@ function WatchdogPane({ ctx }) {
       .catch(thrown => ({ error: String(thrown) }))
 
     if (report?.error) {
-      host.notify({ kind: 'error', message: `Watchdog repair failed: ${report.error}` })
+      host.notify({ kind: 'error', message: `Hermes Watchdog repair failed: ${report.error}` })
 
       return
     }
@@ -185,8 +185,8 @@ function WatchdogPane({ ctx }) {
     host.notify({
       kind: failed > 0 ? 'warning' : 'info',
       message: dryRun
-        ? `Watchdog plan: ${report.attempts?.length ?? 0} incident(s) would be repaired`
-        : `Watchdog: ${fixed} repaired, ${failed} failed, ${escalated} need you`
+        ? `Hermes Watchdog plan: ${report.attempts?.length ?? 0} incident(s) would be repaired`
+        : `Hermes Watchdog: ${fixed} repaired, ${failed} failed, ${escalated} need you`
     })
     client.invalidateQueries({ queryKey: ['hermes-watchdog', 'status'] })
   }
@@ -194,7 +194,7 @@ function WatchdogPane({ ctx }) {
   if (error) {
     return jsx('div', {
       className: 'p-3 text-xs text-(--ui-text-tertiary)',
-      children: 'Watchdog backend unreachable. The plugin is enabled but its API router is not mounted on this gateway.'
+      children: 'Hermes Watchdog backend unreachable. The plugin is enabled but its API router is not mounted on this gateway.'
     })
   }
 
@@ -282,7 +282,7 @@ function WatchdogPane({ ctx }) {
 
 export default {
   id: 'hermes-watchdog',
-  name: 'Watchdog',
+  name: 'Hermes Watchdog',
   register(ctx) {
     ctx.register({
       area: 'statusBar.right',
@@ -301,7 +301,7 @@ export default {
       },
       id: 'watchdog',
       render: () => jsx(WatchdogPane, { ctx }),
-      title: 'Watchdog'
+      title: 'Hermes Watchdog'
     })
   }
 }
