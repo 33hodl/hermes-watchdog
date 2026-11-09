@@ -184,7 +184,10 @@ def cycle(
                 break
 
         if escalated:
-            outcome, detail = "escalated", "playbook escalated to the operator"
+            handed = sources.mark_alerted(inc["incident_id"])
+            outcome = "escalated"
+            detail = ("handed to the operator (core incident marked alerted)" if handed
+                      else "handed to the operator (core did not accept the state change)")
         elif step_records and all(r["ok"] for r in step_records):
             ok = _verified(job, inc["incident_id"], started)
             outcome, detail = ("repaired", "verified by Hermes's own incident/execution record") if ok \

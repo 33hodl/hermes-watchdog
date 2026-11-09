@@ -22,6 +22,20 @@ timeout, and the only remedy is a human noticing a ping and re-running it by han
 Watchdog closes that loop with three bounded verbs — rerun, pause, escalate — and a
 hard daily attempt budget per incident, so it cannot become a second failure mode.
 
+## Using it
+
+Most days: nothing. The plugin’s job is to leave you alone.
+
+| What you see | What you do |
+| --- | --- |
+| Green dot, `0 open` | Nothing. Repairs already ran and were verified. |
+| An incident row | Press **Repair** on that row, or **Run repair cycle** for all of them. Watchdog runs the playbook that matches the failure type. |
+| A row marked **needs you** | Watchdog could not fix it, so it paused the job and handed it over. The row says which step it tried. That is the one case that needs a person. |
+| **Plan only** | Dry run: shows what a cycle would do without touching anything. |
+
+The same three things are reachable without the UI: `watchdog_status`,
+`watchdog_repair` (with `dry_run`), and `/watchdog` in any Hermes chat.
+
 ## What it adds
 
 | Surface | What it does |
@@ -163,7 +177,7 @@ and renders a Desktop pane over the same report the tools return.
 ## Development
 
 ```bash
-python -m unittest discover -s tests -v      # 17 tests, stdlib + FastAPI
+python -m unittest discover -s tests -v      # 20 tests, stdlib + FastAPI
 hermes plugins validate /path/to/hermes-watchdog --install-deps
 hermes plugins doctor /path/to/hermes-watchdog
 ```

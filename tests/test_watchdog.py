@@ -147,7 +147,31 @@ class CycleTests(unittest.TestCase):
             }]
             pb.match_playbook.side_effect = lambda inc, books, job_name="": books[0]
             report = repair.cycle(data_dir=None)
+            s.mark_alerted.assert_called_once()
         self.assertEqual(len(report["escalated"]), 1)
+        self.assertIn("handed to the operator", report["escalated"][0]["detail"])
+
+
+class HandoffTests(unittest.TestCase):
+    def test_escalation_marks_the_core_incident_alerted(self):
+        fake = SimpleNamespace(set_incident_state=lambda incident_id, state: True)
+        with patch.dict(sys.modules, {"cron": SimpleNamespace(incidents=fake), "cron.incidents": fake}):
+            self.assertTrue(sources.mark_alerted("inc-1"))
+
+    def test_missing_core_is_reported_not_claimed(self):
+        fake = SimpleNamespace(set_incident_state=lambda *a: (_ for _ in ()).throw(RuntimeError("moved")))
+        with patch.dict(sys.modules, {"cron": SimpleNamespace(incidents=fake), "cron.incidents": fake}):
+            self.assertFalse(sources.mark_alerted("inc-1"))
+
+    def test_needs_you_counts_alerted_incidents(self):
+        rows = [
+            {"id": "a", "job_id": "j", "state": "detected", "failure_type": "script"},
+            {"id": "b", "job_id": "j", "state": "alerted", "failure_type": "unknown"},
+        ]
+        with patch.object(sources, "_incidents", return_value=rows):
+            snap = sources.snapshot()
+        self.assertEqual(snap["counts"]["open_incidents"], 2)
+        self.assertEqual(snap["counts"]["needs_you"], 1)
 
 
 class SnapshotTests(unittest.TestCase):

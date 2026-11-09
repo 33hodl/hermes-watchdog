@@ -104,7 +104,10 @@ function IncidentRow({ incident, onRepair, busy, compact }) {
                 className: 'truncate text-xs font-medium text-(--ui-text-primary)',
                 children: incident.job_name || incident.job_id
               }),
-              jsx(Badge, { variant: 'muted', children: incident.failure_type })
+              jsx(Badge, { variant: incident.state === 'alerted' ? 'warn' : 'muted', children: incident.failure_type }),
+              incident.state === 'alerted'
+                ? jsx(Badge, { variant: 'warn', children: 'needs you' })
+                : null
             ]
           }),
           jsx('div', {
@@ -183,17 +186,27 @@ function WatchdogBody({ ctx, compact }) {
       return
     }
 
+    const attempts = (report && report.attempts) || []
     const fixed = (report && report.repaired && report.repaired.length) || 0
     const failed = (report && report.failed && report.failed.length) || 0
     const escalated = (report && report.escalated && report.escalated.length) || 0
-    const planned = (report && report.attempts && report.attempts.length) || 0
 
-    host.notify({
-      kind: failed > 0 ? 'warning' : 'success',
-      message: dryRun
-        ? 'Watchdog plan: ' + planned + ' incident(s) would be repaired'
-        : 'Hermes Watchdog: ' + fixed + ' repaired, ' + failed + ' failed, ' + escalated + ' need you'
-    })
+    let message
+    if (dryRun) {
+      // A plan has to distinguish "nothing to do" from "nothing I can fix".
+      const repairs = attempts.filter(a => !(a.steps || []).includes('escalate')).length
+      const handoffs = attempts.filter(a => (a.steps || []).includes('escalate')).length
+      message = attempts.length === 0
+        ? 'Watchdog plan: nothing open, nothing to do'
+        : 'Watchdog plan: ' + repairs + ' to repair, ' + handoffs + ' to hand to you'
+    } else if (fixed + failed + escalated === 0) {
+      message = 'Hermes Watchdog: nothing open, nothing to do'
+    } else {
+      message = 'Hermes Watchdog: ' + fixed + ' repaired · ' + escalated + ' need you'
+        + (failed ? ' · ' + failed + ' failed' : '')
+    }
+
+    host.notify({ kind: failed > 0 ? 'warning' : 'success', message })
     client.invalidateQueries({ queryKey: KEY })
   }
 
@@ -236,7 +249,9 @@ function WatchdogBody({ ctx, compact }) {
           }),
           jsx('span', {
             className: 'text-[0.6875rem] text-(--ui-text-tertiary)',
-            children: (counts.jobs || 0) + ' jobs · ' + incidents.length + ' open · ' + (summary.repaired_7d || 0) + ' repaired/7d'
+            children: (counts.jobs || 0) + ' jobs · ' + incidents.length + ' open'
+              + (counts.needs_you ? ' · ' + counts.needs_you + ' need you' : '')
+              + ' · ' + (summary.repaired_7d || 0) + ' repaired/7d'
           }),
           jsx('span', { className: 'flex-1' }),
           jsx(Button, {
@@ -255,6 +270,12 @@ function WatchdogBody({ ctx, compact }) {
           jsx(Button, { onClick: () => run(null, true), size: 'xs', variant: 'secondary', children: 'Plan only' })
         ]
       }),
+      compact
+        ? null
+        : jsx('div', {
+            className: 'px-3 pb-1 text-[0.6875rem] leading-4 text-(--ui-text-quaternary)',
+            children: 'Green means there is nothing to do. On an open incident, Repair runs the playbook that matches the failure — and when it cannot fix the job, it pauses it and hands it to you here.'
+          }),
       jsx(ScrollArea, {
         className: 'min-h-0 flex-1',
         children: jsxs('div', {

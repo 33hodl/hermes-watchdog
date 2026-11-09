@@ -69,6 +69,22 @@ def incident_view(inc: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def mark_alerted(incident_id: str) -> bool:
+    """Record that this incident has been handed to the operator.
+
+    Uses core's own lifecycle (`alerted`), which also restarts its reminder
+    cooldown, so a handoff is visible in `hermes cron` rather than living only in
+    our ledger. Returns False when core refuses or is unavailable — the caller
+    must not claim the handoff happened.
+    """
+    try:
+        from cron import incidents as _inc  # late import
+        return bool(_inc.set_incident_state(incident_id, "alerted"))
+    except Exception as exc:  # noqa: BLE001
+        log.debug("watchdog: could not mark incident %s alerted: %s", incident_id, exc)
+        return False
+
+
 def open_incidents(job_id: Optional[str] = None) -> List[Dict[str, Any]]:
     """Incidents core has recorded but not resolved or acked."""
     out: List[Dict[str, Any]] = []
@@ -128,6 +144,7 @@ def snapshot(job_id: Optional[str] = None) -> Dict[str, Any]:
             "jobs": len(jobs),
             "failing_jobs": len(failing),
             "open_incidents": len(incidents),
+            "needs_you": sum(1 for i in incidents if i.get("state") == "alerted"),
         },
         "jobs": jobs,
         "incidents": incidents,
