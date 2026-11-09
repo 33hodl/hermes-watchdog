@@ -72,8 +72,15 @@ function Chip({ ctx }) {
   const incidents = (data && data.counts && data.counts.open_incidents) || 0
   const health = (data && data.health) || 'unknown'
 
-  return jsxs('span', {
-    className: cn('inline-flex h-full items-center gap-1 px-1.5 text-[0.6875rem]', 'text-(--ui-text-tertiary)'),
+  // Clickable: the chip is the one surface present on every layout, so it is the
+  // guaranteed door to the page when a layout has no right zone (or a client build
+  // predates the sidebar.nav area).
+  return jsxs('button', {
+    className: cn('inline-flex h-full cursor-pointer items-center gap-1 px-1.5 text-[0.6875rem]',
+      'text-(--ui-text-tertiary) hover:text-(--ui-text-secondary)'),
+    onClick: () => host.navigate(PAGE_PATH),
+    title: 'Open Hermes Watchdog',
+    type: 'button',
     children: [
       jsx(StatusDot, { tone: TONE[health] || 'muted' }),
       jsx('span', { children: incidents > 0 ? 'watchdog ' + incidents : 'watchdog' })
