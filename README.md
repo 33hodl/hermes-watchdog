@@ -95,6 +95,11 @@ The pane is opt-in (Settings → Plugins), like every unified-package Desktop ha
 It polls `/api/plugins/hermes-watchdog/status` every 15s and posts `/repair`, so
 the pane, the tools and the hook can never disagree.
 
+![The Watchdog page in Hermes Desktop](docs/ui-page.png)
+
+The page lives at `/watchdog`, with a row under Artifacts in the sidebar and the
+status chip as the other door. Live numbers above come from a real profile.
+
 ![Hermes Watchdog in Settings → Plugins](docs/ui-settings.png)
 
 Installed and enabled on a real Desktop client: the Agent + Desktop halves toggle
