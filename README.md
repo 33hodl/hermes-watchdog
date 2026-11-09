@@ -91,8 +91,14 @@ Verbs: `rerun_job`, `pause_job`, `check` (argv list, no shell), `escalate`.
 ## Desktop pane
 
 The pane is opt-in (Settings → Plugins), like every unified-package Desktop half.
-It polls `/api/plugins/hermes-watchdog/status` every 15s and posts
-`/repair`, so the pane, the tools and the hook can never disagree.
+It polls `/api/plugins/hermes-watchdog/status` every 15s and posts `/repair`, so
+the pane, the tools and the hook can never disagree.
+
+![Hermes Watchdog in Settings → Plugins](docs/ui-settings.png)
+
+Installed and enabled on a real Desktop client: the Agent + Desktop halves toggle
+together, and the status-bar chip renders live incident counts from the same
+`/status` route the pane reads.
 
 ## Proof
 
@@ -126,7 +132,7 @@ and renders a Desktop pane over the same report the tools return.
 ## Development
 
 ```bash
-python -m unittest discover -s tests -v      # 14 tests, stdlib unittest
+python -m unittest discover -s tests -v      # 17 tests, stdlib + FastAPI
 hermes plugins validate /path/to/hermes-watchdog --install-deps
 hermes plugins doctor /path/to/hermes-watchdog
 ```
