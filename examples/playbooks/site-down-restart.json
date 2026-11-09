@@ -1,0 +1,10 @@
+{
+  "id": "site-down-restart",
+  "match": { "error_contains": "connection refused" },
+  "steps": [
+    { "verb": "check", "argv": ["systemctl", "is-active", "--quiet", "nginx"], "timeout": 10 },
+    { "verb": "rerun_job" }
+  ],
+  "max_attempts_per_day": 3,
+  "description": "A local service died; prove it is back, then rerun the job that needed it."
+}

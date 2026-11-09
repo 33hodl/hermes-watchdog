@@ -1,0 +1,11 @@
+{
+  "id": "disk-full-pause",
+  "match": { "error_contains": "no space left on device" },
+  "steps": [
+    { "verb": "check", "argv": ["df", "-P", "/"], "timeout": 10 },
+    { "verb": "pause_job" },
+    { "verb": "escalate" }
+  ],
+  "max_attempts_per_day": 1,
+  "description": "Retrying cannot free a disk. Stop the schedule and hand it to a human."
+}

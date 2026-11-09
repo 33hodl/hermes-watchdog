@@ -1,0 +1,7 @@
+{
+  "id": "rate-limit-backoff",
+  "match": { "failure_type": "rate_limit" },
+  "steps": [ { "verb": "rerun_job" } ],
+  "max_attempts_per_day": 2,
+  "description": "Quota errors usually clear on their own; one bounded rerun, then let the budget stop it."
+}

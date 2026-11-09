@@ -107,6 +107,15 @@ instead of retried.
 `python -m unittest discover -s tests` runs the engine tests and the dashboard
 route tests (stdlib + FastAPI, no network). CI runs the same suite on every push.
 
+## Example playbooks
+
+`examples/playbooks/` ships three you can copy into
+`plugin-data/hermes-watchdog/playbooks/`:
+
+- `site-down-restart.json` — a local service died: check it is back, then rerun.
+- `disk-full-pause.json` — retrying cannot free a disk: pause the job and escalate.
+- `rate-limit-backoff.json` — quota errors clear: one bounded rerun.
+
 ## Why a plugin and not a skill
 
 A skill would tell the agent how to check cron state; it would still need a human
