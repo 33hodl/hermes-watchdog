@@ -38,16 +38,17 @@ still, but it needs the owner's account and API key (10k characters/month).
 `wd-video/build2.py` renders each beat as a card (headless Chrome screenshot of
 plain-language text), then muxes the narration with ffmpeg. The technical line in
 the "proof" card is copied from a real repair cycle on this machine, not invented.
-The Desktop beat is a real screenshot of the product (the `/watchdog` page on the
-owner's Mac) shown at native pixel size and drifting slowly, not a mock: the app
-runs on the owner's Mac, so the build host cannot record live footage.
+The Desktop beat is real screen footage of the product on the owner's Mac
+(`/watchdog`, with core's escalated handoff in the recent-repairs ledger), trimmed
+to 8.2s, cropped to the app, and captioned. Earlier cuts used a still; live
+recording is better evidence, so v4 uses it.
 
 ## Assets
 
-- video: `hermes-watchdog-demo-v3.mp4` (60s, 1440x900)
+- video: `hermes-watchdog-demo-v4.mp4` (61s, 1440x900)
 - narration: `audio-v3/s1..s6.mp3` + `audio-v3/ui.mp3`
 - scene text: `scenes3.json`, rendered by `wd-video/build3.py`
-- still used for the Desktop beat: `shots/ui-page-frame.png`
+- Desktop beat: `rec/rec.mov` (owner's recording) → `v4_ui.mp4`
 
 ## Submission form
 
