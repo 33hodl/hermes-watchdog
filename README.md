@@ -1,9 +1,11 @@
 # Hermes Watchdog
 
-**Cron jobs that fix themselves.** Watchdog reads the failures Hermes already
-records, matches each one to a playbook, runs the repair, verifies it against
-Hermes's own execution record, and shows the result in the Desktop app — instead
-of pinging you about the same break every day until you turn the job off.
+![Hermes Watchdog](docs/banner.png)
+
+**Cron jobs that fix themselves.** A scheduled job fails at 3am and nothing tells
+you. Hermes Watchdog notices, tries the fix that fits the failure, then checks
+whether the next run actually worked. You only hear about it when the fix didn't
+take.
 
 ```
 hermes plugins install hermes-watchdog
@@ -91,6 +93,26 @@ Verbs: `rerun_job`, `pause_job`, `check` (argv list, no shell), `escalate`.
 The pane is opt-in (Settings → Plugins), like every unified-package Desktop half.
 It polls `/api/plugins/hermes-watchdog/status` every 15s and posts
 `/repair`, so the pane, the tools and the hook can never disagree.
+
+## Proof
+
+Live, on one profile with 81 scheduled jobs: an interrupted run came back as
+`health=degraded jobs=81 incidents=1`, a dry-run cycle matched it to
+`builtin-escalate-unknown` and planned exactly one step, and in a throwaway
+profile a timeout incident went `detected → resolved` after
+`builtin-rerun-timeout` reran the job and core's own execution record confirmed
+the next run succeeded. A broken scheduler script was paused and escalated
+instead of retried.
+
+`python -m unittest discover -s tests` runs the engine tests and the dashboard
+route tests (stdlib + FastAPI, no network). CI runs the same suite on every push.
+
+## Why a plugin and not a skill
+
+A skill would tell the agent how to check cron state; it would still need a human
+to notice the failure first. The plugin changes what Hermes does: it reads the
+cron store at runtime, fires jobs through the cron tool, runs playbooks on a hook,
+and renders a Desktop pane over the same report the tools return.
 
 ## Development
 
