@@ -117,7 +117,7 @@ class CycleTests(unittest.TestCase):
         report, calls = self._run(True)
         self.assertEqual(calls, [])
         self.assertEqual(len(report["skipped"]), 1)
-        self.assertIn("budget spent", report["skipped"][0]["reason"])
+        self.assertIn("daily limit", report["skipped"][0]["reason"])
 
     def test_dry_run_touches_nothing(self):
         report, calls = self._run(True)
@@ -150,6 +150,24 @@ class CycleTests(unittest.TestCase):
             s.mark_alerted.assert_called_once()
         self.assertEqual(len(report["escalated"]), 1)
         self.assertIn("handed to the operator", report["escalated"][0]["detail"])
+
+
+class BudgetHandoffTests(unittest.TestCase):
+    def test_budget_skip_is_a_handoff_not_silence(self):
+        with patch.object(repair, "sources") as s, patch.object(repair, "ledger") as lg, \
+                patch.object(repair, "playbooks") as pb:
+            s.snapshot.return_value = _jobs()
+            pb.all_playbooks.return_value = [{
+                "id": "u", "source": "user", "match": {}, "steps": [{"verb": "rerun_job"}],
+                "max_attempts_per_day": 2, "escalate_on_fail": True,
+            }]
+            pb.match_playbook.side_effect = lambda inc, books, job_name="": books[0]
+            lg.attempts_today.return_value = 2  # today's attempts already spent
+            report = repair.cycle(data_dir=None)
+            s.mark_alerted.assert_called_once()
+        self.assertEqual(len(report["skipped"]), 1)
+        self.assertIn("daily limit", report["skipped"][0]["reason"])
+        self.assertEqual(report["attempts"], [])
 
 
 class HandoffTests(unittest.TestCase):

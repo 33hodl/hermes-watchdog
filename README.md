@@ -30,7 +30,7 @@ Most days: nothing. The plugin’s job is to leave you alone.
 | --- | --- |
 | Green dot, `0 open` | Nothing. Repairs already ran and were verified. |
 | An incident row | Press **Repair** on that row, or **Run repair cycle** for all of them. Watchdog runs the playbook that matches the failure type. |
-| A row marked **needs you** | Watchdog could not fix it, so it paused the job and handed it over. The row says which step it tried. That is the one case that needs a person. |
+| A row marked **needs you** | Watchdog could not fix it — no playbook for that failure, or today's attempt limit is spent. The job is paused where that helps, the incident is marked `alerted` in Hermes itself, and the row says what it tried. This is the only case that needs a person. |
 | **Plan only** | Dry run: shows what a cycle would do without touching anything. |
 
 The same three things are reachable without the UI: `watchdog_status`,
@@ -177,7 +177,7 @@ and renders a Desktop pane over the same report the tools return.
 ## Development
 
 ```bash
-python -m unittest discover -s tests -v      # 20 tests, stdlib + FastAPI
+python -m unittest discover -s tests -v      # 21 tests, stdlib + FastAPI
 hermes plugins validate /path/to/hermes-watchdog --install-deps
 hermes plugins doctor /path/to/hermes-watchdog
 ```

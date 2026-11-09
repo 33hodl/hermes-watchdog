@@ -190,19 +190,22 @@ function WatchdogBody({ ctx, compact }) {
     const fixed = (report && report.repaired && report.repaired.length) || 0
     const failed = (report && report.failed && report.failed.length) || 0
     const escalated = (report && report.escalated && report.escalated.length) || 0
+    const skipped = (report && report.skipped && report.skipped.length) || 0
 
     let message
     if (dryRun) {
       // A plan has to distinguish "nothing to do" from "nothing I can fix".
       const repairs = attempts.filter(a => !(a.steps || []).includes('escalate')).length
-      const handoffs = attempts.filter(a => (a.steps || []).includes('escalate')).length
-      message = attempts.length === 0
+      const handoffs = attempts.filter(a => (a.steps || []).includes('escalate')).length + skipped
+      message = attempts.length + skipped === 0
         ? 'Watchdog plan: nothing open, nothing to do'
         : 'Watchdog plan: ' + repairs + ' to repair, ' + handoffs + ' to hand to you'
-    } else if (fixed + failed + escalated === 0) {
+    } else if (fixed + failed + escalated + skipped === 0) {
       message = 'Hermes Watchdog: nothing open, nothing to do'
     } else {
-      message = 'Hermes Watchdog: ' + fixed + ' repaired · ' + escalated + ' need you'
+      // A skipped incident is only 'skipped' because today's attempts are spent —
+      // that is a hand-off, never silence.
+      message = 'Hermes Watchdog: ' + fixed + ' repaired · ' + (escalated + skipped) + ' need you'
         + (failed ? ' · ' + failed + ' failed' : '')
     }
 
