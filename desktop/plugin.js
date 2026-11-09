@@ -97,7 +97,7 @@ function IncidentRow({ incident, onRepair, busy }) {
                 className: 'truncate text-xs font-medium text-(--ui-text-primary)',
                 children: incident.job_name || incident.job_id
               }),
-              jsx(Badge, { variant: 'secondary', children: incident.failure_type })
+              jsx(Badge, { variant: 'muted', children: incident.failure_type })
             ]
           }),
           jsx('div', {
