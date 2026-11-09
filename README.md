@@ -116,6 +116,31 @@ profile a timeout incident went `detected → resolved` after
 the next run succeeded. A broken scheduler script was paused and escalated
 instead of retried.
 
+### Reproduce it in one command
+
+`scripts/proof.py` builds a throwaway `HERMES_HOME`, creates a job that fails on
+its first run, and lets the repair cycle handle it. Nothing touches your real
+profile, and no network is used.
+
+```
+$ python scripts/proof.py
+run 1  last_status: error
+incidents before: [('…909afa', 'timeout', 'detected'), ('…757d79', 'script', 'detected')]
+cycle  health: degraded attempts: 2
+  builtin-rerun-timeout -> repaired (verified by Hermes's own incident/execution record)
+    rerun_job ok=True rerun requested
+  builtin-escalate-script -> escalated (playbook escalated to the operator)
+    pause_job ok=True paused
+    escalate ok=True escalated to operator
+incidents after: [('…909afa', 'resolved'), ('…757d79', 'resolved')]
+
+PROOF PASSED
+```
+
+One bad run produces two incidents in core — the timeout and the non-zero exit —
+and Watchdog answers them differently: a bounded rerun it can prove worked, and a
+pause it escalates instead of retrying something that cannot fix itself.
+
 `python -m unittest discover -s tests` runs the engine tests and the dashboard
 route tests (stdlib + FastAPI, no network). CI runs the same suite on every push.
 
