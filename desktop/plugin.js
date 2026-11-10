@@ -214,6 +214,8 @@ function WatchdogBody({ ctx, compact }) {
     const failed = (report && report.failed && report.failed.length) || 0
     const escalated = (report && report.escalated && report.escalated.length) || 0
     const skipped = (report && report.skipped && report.skipped.length) || 0
+    const stale = (report && report.stale && report.stale.length) || 0
+    const staleClosed = ((report && report.stale) || []).filter(item => item.closed).length
 
     let message
     if (dryRun) {
@@ -223,14 +225,16 @@ function WatchdogBody({ ctx, compact }) {
       message = attempts.length + skipped === 0
         ? 'Watchdog plan: nothing open, nothing to do'
         : 'Watchdog plan: ' + repairs + ' to repair, ' + handoffs + ' to hand to you'
-    } else if (fixed + failed + escalated + skipped === 0) {
+    } else if (fixed + failed + escalated + skipped + stale === 0) {
       message = 'Hermes Watchdog: nothing open, nothing to do'
     } else {
       // A skipped incident is only 'skipped' because today's attempts are spent —
       // that is a hand-off, never silence.
       const lists = ((report && report.escalated) || []).concat((report && report.skipped) || [])
       const unrecorded = lists.filter(item => item.handed_over === false).length
-      message = 'Hermes Watchdog: ' + fixed + ' repaired · ' + (escalated + skipped) + ' need you'
+      message = 'Hermes Watchdog: ' + fixed + ' repaired'
+        + (escalated + skipped ? ' · ' + (escalated + skipped) + ' need you' : '')
+        + (staleClosed ? ' · ' + staleClosed + ' closed (job deleted)' : '')
         + (failed ? ' · ' + failed + ' failed' : '')
         + (unrecorded ? ' · handoff not recorded in Hermes (cron store refused)' : '')
     }

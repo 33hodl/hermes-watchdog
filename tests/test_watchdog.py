@@ -153,6 +153,35 @@ class CycleTests(unittest.TestCase):
         self.assertIn("handed to the operator", report["escalated"][0]["detail"])
 
 
+class OrphanedIncidentTests(unittest.TestCase):
+    def test_incident_for_a_deleted_job_is_closed_not_repaired(self):
+        with patch.object(repair, "sources") as s, patch.object(repair, "ledger") as lg, \
+                patch.object(repair, "playbooks") as pb:
+            s.snapshot.return_value = _jobs()
+            s.job_exists.return_value = False
+            s.ack.return_value = (True, "closed")
+            report = repair.cycle(data_dir=None)
+            pb.match_playbook.assert_not_called()
+            lg.start_attempt.assert_not_called()
+        self.assertEqual(len(report["stale"]), 1)
+        self.assertTrue(report["stale"][0]["closed"])
+
+    def test_unknown_job_state_does_not_close_anything(self):
+        with patch.object(repair, "sources") as s, patch.object(repair, "ledger", _FakeLedger()), \
+                patch.object(repair, "playbooks") as pb, \
+                patch.object(repair, "_cron_api", lambda a, j: {"success": True}):
+            s.snapshot.return_value = _jobs()
+            s.job_exists.return_value = None
+            pb.all_playbooks.return_value = [{
+                "id": "u", "source": "user", "match": {}, "steps": [{"verb": "rerun_job"}],
+                "max_attempts_per_day": 2, "escalate_on_fail": True,
+            }]
+            pb.match_playbook.side_effect = lambda inc, books, job_name="": books[0]
+            report = repair.cycle(data_dir=None)
+            s.ack.assert_not_called()
+        self.assertEqual(report["stale"], [])
+
+
 class AckTests(unittest.TestCase):
     def test_ack_closes_through_core(self):
         fake = SimpleNamespace(list_incidents=lambda: [{"id": "inc-1"}], ack_incident=lambda incident_id: True)

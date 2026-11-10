@@ -132,6 +132,7 @@ def cycle(
         "failed": [],
         "escalated": [],
         "skipped": [],
+        "stale": [],
         "attempts": [],
     }
 
@@ -142,6 +143,17 @@ def cycle(
             continue
         job = inc["job_id"]
         name = names.get(job, job)
+        if sources.job_exists(job) is False:
+            # Nothing to repair and nothing will ever recover it: the job is gone.
+            closed, reason = sources.ack(inc["incident_id"])
+            report["stale"].append({
+                "incident_id": inc["incident_id"],
+                "job_id": job,
+                "job_name": name,
+                "closed": closed,
+                "reason": "job no longer exists" + ("" if closed else f" — could not close: {reason}"),
+            })
+            continue
         book = playbooks.match_playbook(inc, books, job_name=name)
         if book is None:
             handed = sources.mark_alerted(inc["incident_id"])

@@ -85,6 +85,21 @@ def mark_alerted(incident_id: str) -> bool:
         return False
 
 
+def job_exists(job_id: str) -> Optional[bool]:
+    """Does this job still exist (paused counts as existing)? None when unreadable.
+
+    Core closes an incident when its job recovers. A job that was deleted never
+    recovers, so its incident would sit open forever unless someone notices.
+    """
+    try:
+        from cron import jobs as _jobs_mod  # late import
+        rows = _jobs_mod.list_jobs(include_disabled=True) or []
+    except Exception as exc:  # noqa: BLE001
+        log.debug("watchdog: job lookup failed: %s", exc)
+        return None
+    return any((r.get("job_id") or r.get("id")) == job_id for r in rows)
+
+
 def ack(incident_id: str) -> Tuple[bool, str]:
     """Close an incident the operator has dealt with. Returns (closed, reason).
 
