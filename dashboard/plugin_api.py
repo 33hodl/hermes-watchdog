@@ -59,8 +59,8 @@ async def run_repair(body: RepairRequest) -> Dict[str, Any]:
 
 @router.post("/ack")
 async def ack(body: AckRequest) -> Dict[str, Any]:
-    closed = sources.ack(body.incident_id)
-    return {"closed": closed, "incident_id": body.incident_id}
+    closed, reason = sources.ack(body.incident_id)
+    return {"closed": closed, "incident_id": body.incident_id, "reason": reason}
 
 
 @router.get("/runbooks")

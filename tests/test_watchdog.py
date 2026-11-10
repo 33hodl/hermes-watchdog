@@ -155,14 +155,21 @@ class CycleTests(unittest.TestCase):
 
 class AckTests(unittest.TestCase):
     def test_ack_closes_through_core(self):
-        fake = SimpleNamespace(ack_incident=lambda incident_id: True)
+        fake = SimpleNamespace(list_incidents=lambda: [{"id": "inc-1"}], ack_incident=lambda incident_id: True)
         with patch.dict(sys.modules, {"cron": SimpleNamespace(incidents=fake), "cron.incidents": fake}):
-            self.assertTrue(sources.ack("inc-1"))
+            self.assertTrue(sources.ack("inc-1")[0])
 
     def test_ack_that_core_refuses_is_false(self):
-        fake = SimpleNamespace(ack_incident=lambda incident_id: False)
+        fake = SimpleNamespace(list_incidents=lambda: [{"id": "inc-1"}], ack_incident=lambda incident_id: False)
         with patch.dict(sys.modules, {"cron": SimpleNamespace(incidents=fake), "cron.incidents": fake}):
-            self.assertFalse(sources.ack("inc-1"))
+            self.assertFalse(sources.ack("inc-1")[0])
+
+    def test_ack_reports_a_mismatched_id_instead_of_guessing(self):
+        fake = SimpleNamespace(list_incidents=lambda: [{"id": "real-id"}], ack_incident=lambda i: True)
+        with patch.dict(sys.modules, {"cron": SimpleNamespace(incidents=fake), "cron.incidents": fake}):
+            closed, reason = sources.ack("stale-id")
+        self.assertFalse(closed)
+        self.assertIn("not in the cron store", reason)
 
     def test_incidents_carry_their_job_name(self):
         jobs = [{"job_id": "job-1", "name": "nightly-digest", "last_status": "error", "last_run_at": "x"}]

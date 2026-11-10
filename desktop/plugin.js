@@ -105,6 +105,10 @@ function IncidentRow({ incident, onRepair, onAck, busy, compact }) {
                 children: incident.job_name || incident.job_id
               }),
               jsx(Badge, { variant: incident.state === 'alerted' ? 'warn' : 'muted', children: incident.failure_type }),
+              jsx('span', {
+                className: 'shrink-0 font-mono text-[0.625rem] text-(--ui-text-quaternary)',
+                children: incident.incident_id
+              }),
               incident.state === 'alerted'
                 ? jsx(Badge, { variant: 'warn', children: 'needs you' })
                 : null
@@ -248,7 +252,7 @@ function WatchdogBody({ ctx, compact }) {
       kind: result && result.closed ? 'success' : 'warning',
       message: result && result.closed
         ? 'Incident acknowledged — quiet until the same error returns'
-        : 'Could not close that incident (already closed, or the cron store refused)'
+        : 'Could not close it: ' + ((result && result.reason) || 'the cron store refused')
     })
     client.invalidateQueries({ queryKey: KEY })
   }

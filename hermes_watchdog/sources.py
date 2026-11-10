@@ -8,7 +8,7 @@ watchdog that crashes because a helper was renamed is worse than one that report
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 log = logging.getLogger(__name__)
 
@@ -85,18 +85,29 @@ def mark_alerted(incident_id: str) -> bool:
         return False
 
 
-def ack(incident_id: str) -> bool:
-    """Close an incident the operator has dealt with.
+def ack(incident_id: str) -> Tuple[bool, str]:
+    """Close an incident the operator has dealt with. Returns (closed, reason).
 
     Core keeps the signature quiet until the same error returns, so this is how a
-    hand-off ends — it is the operator's counterpart to `mark_alerted`.
+    hand-off ends — it is the operator's counterpart to `mark_alerted`. The reason
+    is returned rather than swallowed: "it refused" without a why is the kind of
+    dead end this plugin is supposed to remove.
     """
     try:
         from cron import incidents as _inc  # late import
-        return bool(_inc.ack_incident(incident_id))
     except Exception as exc:  # noqa: BLE001
-        log.debug("watchdog: could not ack incident %s: %s", incident_id, exc)
-        return False
+        return False, f"cron store unavailable: {type(exc).__name__}: {exc}"
+    try:
+        known = {row.get("id") for row in (_inc.list_incidents() or [])}
+    except Exception:  # noqa: BLE001
+        known = set()
+    if known and incident_id not in known:
+        return False, f"incident {incident_id} is not in the cron store (known: {', '.join(sorted(map(str, known))[:3]) or 'none'})"
+    try:
+        closed = bool(_inc.ack_incident(incident_id))
+    except Exception as exc:  # noqa: BLE001
+        return False, f"{type(exc).__name__}: {exc}"
+    return closed, ("closed" if closed else "already closed, missing, or refused by core")
 
 
 def open_incidents(job_id: Optional[str] = None) -> List[Dict[str, Any]]:
