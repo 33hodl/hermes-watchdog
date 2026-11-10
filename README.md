@@ -147,14 +147,15 @@ cycle  health: degraded attempts: 2
   builtin-escalate-script -> escalated (playbook escalated to the operator)
     pause_job ok=True paused
     escalate ok=True escalated to operator
-incidents after: [('…909afa', 'resolved'), ('…757d79', 'resolved')]
+incidents after: [('…909afa', 'resolved'), ('…757d79', 'alerted')]
 
 PROOF PASSED
 ```
 
 One bad run produces two incidents in core — the timeout and the non-zero exit —
 and Watchdog answers them differently: a bounded rerun it can prove worked, and a
-pause it escalates instead of retrying something that cannot fix itself.
+pause it escalates instead of retrying something that cannot fix itself. Neither is
+left `detected`.
 
 `python -m unittest discover -s tests` runs the engine tests and the dashboard
 route tests (stdlib + FastAPI, no network). CI runs the same suite on every push.

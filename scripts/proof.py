@@ -8,7 +8,8 @@ network. It exercises the real code paths: Hermes's own cron job store, its own
     python scripts/proof.py
 
 Exit 0 means: the timeout incident was rerun, the next run succeeded, core's own
-record moved the incident detected -> resolved, and the ledger recorded `repaired`.
+record moved it off `detected`, and the ledger recorded `repaired`. The script
+incident is handed off (`alerted`) rather than retried — nothing is left unhandled.
 Any other outcome exits 1 with the report printed.
 """
 from __future__ import annotations
@@ -75,11 +76,11 @@ def main() -> int:
         print("incidents after:", after, "ledger:", rows)
 
         # Core records two incidents for that one bad run: a `script` failure (the
-        # process exited 1) and the timeout we filed. Both must end resolved, and at
-        # least one must have been repaired rather than escalated.
+        # process exited 1) and the timeout we filed. Neither may be left unhandled,
+        # and at least one must have been repaired rather than handed off.
         ok = (
             bool(report["repaired"])
-            and all(state == "resolved" for _, state in after)
+            and all(state in {"resolved", "alerted", "closed"} for _, state in after)
             and incident_id in {i for i, _ in after}
         )
         print("\nPROOF", "PASSED" if ok else "FAILED")
