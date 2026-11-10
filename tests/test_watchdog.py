@@ -118,6 +118,7 @@ class CycleTests(unittest.TestCase):
         self.assertEqual(calls, [])
         self.assertEqual(len(report["skipped"]), 1)
         self.assertIn("daily limit", report["skipped"][0]["reason"])
+        self.assertIn("handed_over", report["skipped"][0])
 
     def test_dry_run_touches_nothing(self):
         report, calls = self._run(True)
@@ -186,6 +187,7 @@ class BudgetHandoffTests(unittest.TestCase):
             s.mark_alerted.assert_called_once()
         self.assertEqual(len(report["skipped"]), 1)
         self.assertIn("daily limit", report["skipped"][0]["reason"])
+        self.assertIn("handed_over", report["skipped"][0])
         self.assertEqual(report["attempts"], [])
 
 

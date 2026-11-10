@@ -144,19 +144,22 @@ def cycle(
         name = names.get(job, job)
         book = playbooks.match_playbook(inc, books, job_name=name)
         if book is None:
-            sources.mark_alerted(inc["incident_id"])
+            handed = sources.mark_alerted(inc["incident_id"])
             report["escalated"].append(
-                {"incident_id": inc["incident_id"], "job_name": name, "reason": "no playbook matched"},
+                {"incident_id": inc["incident_id"], "job_name": name, "handed_over": handed,
+                 "job_id": job, "reason": "no playbook matched"},
             )
             continue
         used = ledger.attempts_today(inc["incident_id"])
         if used >= book["max_attempts_per_day"]:
             # Out of attempts for today: core must say "needs you", not stay quiet
             # while the pane still shows an open incident.
-            sources.mark_alerted(inc["incident_id"])
+            handed = sources.mark_alerted(inc["incident_id"])
             report["skipped"].append({
                 "incident_id": inc["incident_id"],
                 "job_name": name,
+                "job_id": job,
+                "handed_over": handed,
                 "reason": f"daily limit reached ({used}/{book['max_attempts_per_day']} today)",
             })
             continue

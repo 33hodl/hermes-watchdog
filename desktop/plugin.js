@@ -114,12 +114,12 @@ function IncidentRow({ incident, onRepair, onAck, busy, compact }) {
             className: 'mt-0.5 line-clamp-2 text-[0.6875rem] leading-4 text-(--ui-text-tertiary)',
             children: incident.error || 'no error text recorded'
           }),
-          incident.state === 'alerted'
-            ? jsx('div', {
-                className: 'mt-1 text-[0.6875rem] leading-4 text-(--ui-text-quaternary)',
-                children: 'Handed to you: check that job’s last run, then Ack once it is handled. Ack keeps it quiet until the same error returns.'
-              })
-            : null
+          jsx('div', {
+            className: 'mt-1 text-[0.6875rem] leading-4 text-(--ui-text-quaternary)',
+            children: incident.state === 'alerted'
+              ? 'Handed to you: check that job’s last run, then Ack. Ack keeps it quiet until the same error returns.'
+              : 'Repair runs the matching fix. Nothing gets fixed? Check the job’s last run, then Ack to close it.'
+          })
         ]
       }),
       jsxs('div', {
@@ -132,15 +132,14 @@ function IncidentRow({ incident, onRepair, onAck, busy, compact }) {
             variant: 'secondary',
             children: 'Repair'
           }),
-          incident.state === 'alerted'
-            ? jsx(Button, {
-                disabled: busy,
-                onClick: () => onAck(incident.incident_id),
-                size: 'xs',
-                variant: 'ghost',
-                children: 'Ack'
-              })
-            : null
+          jsx(Button, {
+            disabled: busy,
+            onClick: () => onAck(incident.incident_id),
+            size: 'xs',
+            variant: 'ghost',
+            title: 'Close this incident — quiet until the same error returns',
+            children: 'Ack'
+          })
         ]
       })
     ]
@@ -225,8 +224,11 @@ function WatchdogBody({ ctx, compact }) {
     } else {
       // A skipped incident is only 'skipped' because today's attempts are spent —
       // that is a hand-off, never silence.
+      const lists = ((report && report.escalated) || []).concat((report && report.skipped) || [])
+      const unrecorded = lists.filter(item => item.handed_over === false).length
       message = 'Hermes Watchdog: ' + fixed + ' repaired · ' + (escalated + skipped) + ' need you'
         + (failed ? ' · ' + failed + ' failed' : '')
+        + (unrecorded ? ' · handoff not recorded in Hermes (cron store refused)' : '')
     }
 
     host.notify({ kind: failed > 0 ? 'warning' : 'success', message })
