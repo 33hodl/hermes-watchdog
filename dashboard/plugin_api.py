@@ -35,6 +35,10 @@ def _data_dir() -> Optional[Path]:
         return None
 
 
+class AckRequest(BaseModel):
+    incident_id: str = Field(..., description="Incident to close after the operator handled it.")
+
+
 class RepairRequest(BaseModel):
     dry_run: bool = Field(False, description="Plan the cycle without running steps.")
     job_id: Optional[str] = Field(None, description="Limit to one cron job id.")
@@ -51,6 +55,12 @@ async def status(job_id: Optional[str] = None) -> Dict[str, Any]:
 @router.post("/repair")
 async def run_repair(body: RepairRequest) -> Dict[str, Any]:
     return repair.cycle(job_id=body.job_id, dry_run=body.dry_run, data_dir=_data_dir())
+
+
+@router.post("/ack")
+async def ack(body: AckRequest) -> Dict[str, Any]:
+    closed = sources.ack(body.incident_id)
+    return {"closed": closed, "incident_id": body.incident_id}
 
 
 @router.get("/runbooks")

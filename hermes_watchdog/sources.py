@@ -85,6 +85,20 @@ def mark_alerted(incident_id: str) -> bool:
         return False
 
 
+def ack(incident_id: str) -> bool:
+    """Close an incident the operator has dealt with.
+
+    Core keeps the signature quiet until the same error returns, so this is how a
+    hand-off ends — it is the operator's counterpart to `mark_alerted`.
+    """
+    try:
+        from cron import incidents as _inc  # late import
+        return bool(_inc.ack_incident(incident_id))
+    except Exception as exc:  # noqa: BLE001
+        log.debug("watchdog: could not ack incident %s: %s", incident_id, exc)
+        return False
+
+
 def open_incidents(job_id: Optional[str] = None) -> List[Dict[str, Any]]:
     """Incidents core has recorded but not resolved or acked."""
     out: List[Dict[str, Any]] = []
@@ -128,6 +142,9 @@ def snapshot(job_id: Optional[str] = None) -> Dict[str, Any]:
     except Exception as exc:  # noqa: BLE001
         log.debug("watchdog: cron incidents unavailable: %s", exc)
         errors.append(f"incidents: {exc}")
+    names = {j["job_id"]: j["name"] for j in jobs if j.get("name")}
+    for inc in incidents:
+        inc["job_name"] = names.get(inc.get("job_id"), inc.get("job_id", ""))
     if job_id:
         jobs = [j for j in jobs if j["job_id"] == job_id]
 

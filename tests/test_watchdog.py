@@ -152,6 +152,25 @@ class CycleTests(unittest.TestCase):
         self.assertIn("handed to the operator", report["escalated"][0]["detail"])
 
 
+class AckTests(unittest.TestCase):
+    def test_ack_closes_through_core(self):
+        fake = SimpleNamespace(ack_incident=lambda incident_id: True)
+        with patch.dict(sys.modules, {"cron": SimpleNamespace(incidents=fake), "cron.incidents": fake}):
+            self.assertTrue(sources.ack("inc-1"))
+
+    def test_ack_that_core_refuses_is_false(self):
+        fake = SimpleNamespace(ack_incident=lambda incident_id: False)
+        with patch.dict(sys.modules, {"cron": SimpleNamespace(incidents=fake), "cron.incidents": fake}):
+            self.assertFalse(sources.ack("inc-1"))
+
+    def test_incidents_carry_their_job_name(self):
+        jobs = [{"job_id": "job-1", "name": "nightly-digest", "last_status": "error", "last_run_at": "x"}]
+        incs = [{"id": "inc-1", "job_id": "job-1", "state": "detected", "failure_type": "timeout"}]
+        with patch.object(sources, "_jobs", return_value=jobs), patch.object(sources, "_incidents", return_value=incs):
+            snap = sources.snapshot()
+        self.assertEqual(snap["incidents"][0]["job_name"], "nightly-digest")
+
+
 class BudgetHandoffTests(unittest.TestCase):
     def test_budget_skip_is_a_handoff_not_silence(self):
         with patch.object(repair, "sources") as s, patch.object(repair, "ledger") as lg, \

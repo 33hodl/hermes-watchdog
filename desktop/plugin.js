@@ -88,7 +88,7 @@ function Chip({ ctx }) {
   })
 }
 
-function IncidentRow({ incident, onRepair, busy, compact }) {
+function IncidentRow({ incident, onRepair, onAck, busy, compact }) {
   return jsxs('div', {
     className: cn('flex items-start gap-2 border-b border-(--ui-stroke-secondary)/40 px-3 last:border-b-0',
       compact ? 'py-2' : 'py-3'),
@@ -113,15 +113,35 @@ function IncidentRow({ incident, onRepair, busy, compact }) {
           jsx('div', {
             className: 'mt-0.5 line-clamp-2 text-[0.6875rem] leading-4 text-(--ui-text-tertiary)',
             children: incident.error || 'no error text recorded'
-          })
+          }),
+          incident.state === 'alerted'
+            ? jsx('div', {
+                className: 'mt-1 text-[0.6875rem] leading-4 text-(--ui-text-quaternary)',
+                children: 'Handed to you: check that job’s last run, then Ack once it is handled. Ack keeps it quiet until the same error returns.'
+              })
+            : null
         ]
       }),
-      jsx(Button, {
-        disabled: busy,
-        onClick: () => onRepair(incident.job_id),
-        size: 'xs',
-        variant: 'secondary',
-        children: 'Repair'
+      jsxs('div', {
+        className: 'flex shrink-0 items-center gap-1',
+        children: [
+          jsx(Button, {
+            disabled: busy,
+            onClick: () => onRepair(incident.job_id),
+            size: 'xs',
+            variant: 'secondary',
+            children: 'Repair'
+          }),
+          incident.state === 'alerted'
+            ? jsx(Button, {
+                disabled: busy,
+                onClick: () => onAck(incident.incident_id),
+                size: 'xs',
+                variant: 'ghost',
+                children: 'Ack'
+              })
+            : null
+        ]
       })
     ]
   })
@@ -213,6 +233,24 @@ function WatchdogBody({ ctx, compact }) {
     client.invalidateQueries({ queryKey: KEY })
   }
 
+  const ack = async incidentId => {
+    if (!ctx || !ctx.rest) {
+      return
+    }
+
+    const result = await ctx
+      .rest('/ack', { body: { incident_id: incidentId }, method: 'POST' })
+      .catch(thrown => ({ error: String(thrown) }))
+
+    host.notify({
+      kind: result && result.closed ? 'success' : 'warning',
+      message: result && result.closed
+        ? 'Incident acknowledged — quiet until the same error returns'
+        : 'Could not close that incident (already closed, or the cron store refused)'
+    })
+    client.invalidateQueries({ queryKey: KEY })
+  }
+
   if (error) {
     return jsxs('div', {
       className: 'p-4 text-xs text-(--ui-text-tertiary)',
@@ -292,6 +330,7 @@ function WatchdogBody({ ctx, compact }) {
                     compact,
                     incident,
                     key: incident.incident_id,
+                    onAck: ack,
                     onRepair: jobId => run(jobId, false)
                   })
                 ),
