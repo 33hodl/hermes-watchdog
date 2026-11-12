@@ -391,7 +391,10 @@ function WatchdogBody({ ctx, compact }) {
         className: 'flex items-center gap-1.5 px-3 py-2',
         children: [
           jsx(Button, { onClick: () => run(null, false), size: 'xs', variant: 'default', children: 'Check everything now' }),
-          jsx(Button, { onClick: () => run(null, true), size: 'xs', variant: 'secondary', children: 'Preview only' })
+          jsx('span', {
+            className: 'self-center text-[0.6875rem] text-(--ui-text-quaternary)',
+            children: 'Runs a check and fixes whatever it can.'
+          })
         ]
       }),
       jsx(ScrollArea, {

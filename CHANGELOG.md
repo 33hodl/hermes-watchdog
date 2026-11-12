@@ -3,6 +3,12 @@
 Everything here was found by running the plugin on a real Desktop client, not by
 reading the code. Each fix is one behaviour that made a click look like a no-op.
 
+## 0.4.2
+
+- **"Preview only" actually removed.** 0.4.1's edit missed the line (a one-character
+  mismatch), so the button survived while the fold-out fix landed — hence a page
+  that looked half-updated. Replaced with the one-line explanation under the button.
+
 ## 0.4.1
 
 - **"Preview only" removed.** A dry run is the agent's tool (`watchdog_repair` with
