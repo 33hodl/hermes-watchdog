@@ -49,6 +49,14 @@ const PLAIN_CAUSE = {
   unknown: 'Hermes recorded a failure but no details.'
 }
 
+/** A job id is not a name a person can act on. */
+function jobLabel(jobName, jobId) {
+  if (jobName && jobName !== jobId) {
+    return jobName
+  }
+  return 'A job that no longer exists'
+}
+
 function plainCause(incident) {
   const error = String((incident && incident.error) || '').toLowerCase()
   if (error.includes('interrupt')) {
@@ -128,8 +136,8 @@ function IncidentRow({ incident, onRepair, onAck, busy, compact }) {
             children: [
               jsx('span', {
                 className: 'truncate text-xs font-medium text-(--ui-text-primary)',
-                title: incident.incident_id,
-                children: incident.job_name || 'A background job'
+                title: incident.job_id,
+                children: jobLabel(incident.job_name, incident.job_id)
               })
             ]
           }),
@@ -190,7 +198,8 @@ function RepairRow({ repair, compact }) {
             children: [
               jsx('span', {
                 className: 'truncate text-xs text-(--ui-text-primary)',
-                children: repair.job_name || repair.job_id
+                title: repair.job_id,
+                children: jobLabel(repair.job_name, repair.job_id)
               }),
               jsx('span', {
                 className: 'shrink-0 text-[0.6875rem] text-(--ui-text-quaternary)',
