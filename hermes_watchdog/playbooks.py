@@ -40,6 +40,31 @@ log = logging.getLogger(__name__)
 MAX_STEPS = 6
 VALID_VERBS = ("rerun_job", "pause_job", "check", "escalate")
 
+PLAYBOOK_ID_RE = r"^[A-Za-z0-9_-]{1,64}$"
+
+# A `check` step runs an argv on the host. It is allowed only in a playbook FILE the
+# user wrote (or one of ours), never in one the model writes through the tool: an
+# unattended cron hook must not be able to execute model-authored commands.
+CHECK_TOOL_ERROR = (
+    "check steps run host commands, so they are only accepted from a playbook file "
+    "you write yourself (e.g. plugin-data/hermes-watchdog/playbooks/<id>.json) — "
+    "not through the tool"
+)
+
+
+def tool_playbook_error(raw: Dict[str, Any]) -> Optional[str]:
+    """Why the model may not save this playbook, or None when it may."""
+    import re as _re
+    pid = str(raw.get("id") or "").strip()
+    if not _re.fullmatch(PLAYBOOK_ID_RE, pid):
+        return "playbook needs an 'id' matching ^[A-Za-z0-9_-]{1,64}$"
+    steps = raw.get("steps")
+    if not isinstance(steps, list):
+        return "playbook needs a 'steps' list"
+    if any(isinstance(st, dict) and st.get("verb") == "check" for st in steps):
+        return CHECK_TOOL_ERROR
+    return None
+
 BUILTIN_PLAYBOOKS: List[Dict[str, Any]] = [
     {
         "id": "builtin-rerun-timeout",

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import subprocess
 import time
 from typing import Any, Dict, List, Optional
@@ -53,8 +54,14 @@ def _run_step(step: Dict[str, Any], job_id: str) -> Dict[str, Any]:
         argv: List[str] = list(step.get("argv") or [])
         timeout = float(step.get("timeout") or 30)
         try:
-            proc = subprocess.run(  # noqa: S603 - argv list, no shell, authored by the user
-                argv, capture_output=True, text=True, timeout=timeout, check=False,
+            # Minimal child environment: a check needs PATH/HOME/LANG, not every
+            # provider key Hermes holds. A step may name extra variables explicitly.
+            env = {k: os.environ[k] for k in ("PATH", "HOME", "LANG") if k in os.environ}
+            for key, value in (step.get("env") or {}).items():
+                if isinstance(key, str) and isinstance(value, str):
+                    env[key] = value
+            proc = subprocess.run(  # noqa: S603 - argv list, no shell, user-authored file
+                argv, capture_output=True, text=True, timeout=timeout, check=False, env=env,
             )
             tail = (proc.stdout or proc.stderr or "").strip().splitlines()
             return {

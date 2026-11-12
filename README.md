@@ -101,8 +101,14 @@ Verbs: `rerun_job`, `pause_job`, `check` (argv list, no shell), `escalate`.
 - **Upstream note (catalog rule 9):** Hermes has no public seam for reading cron
   incidents, so the plugin imports three documented-in-code modules and the
   `cronjob` tool. Every reader is wrapped; a missing module shows as
-  `upstream.ok: false` in the pane and tools. A read-only cron-health hook would
-  remove those imports — tracked as an upstream issue.
+  `upstream.ok: false` in the pane and tools. It also writes: core incidents it
+  hands over are marked `alerted` and closed through core's own `ack`, and every
+  attempt lands in the plugin's own SQLite ledger. A cron-health hook would remove
+  the imports — tracked as an upstream issue.
+- **`check` steps are file-only.** A `check` runs an argv on the host, so the tool
+  refuses to save one; only a playbook file the user writes (or a built-in) can
+  carry it, and it runs with a minimal environment (`PATH`, `HOME`, `LANG` plus
+  whatever that step names).
 
 ## Desktop pane
 
@@ -179,7 +185,7 @@ and renders a Desktop pane over the same report the tools return.
 ## Development
 
 ```bash
-python -m unittest discover -s tests -v      # 33 tests, stdlib + FastAPI
+python -m unittest discover -s tests -v      # 37 tests, stdlib + FastAPI
 hermes plugins validate /path/to/hermes-watchdog --install-deps
 hermes plugins doctor /path/to/hermes-watchdog
 ```

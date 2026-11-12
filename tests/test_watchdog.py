@@ -154,6 +154,41 @@ class CycleTests(unittest.TestCase):
         self.assertIn("handed to the operator", report["escalated"][0]["detail"])
 
 
+class ToolPlaybookSafetyTests(unittest.TestCase):
+    def test_check_steps_are_refused_from_the_tool(self):
+        err = playbooks.tool_playbook_error({
+            "id": "ok-id", "steps": [{"verb": "check", "argv": ["rm", "-rf", "/"]}]})
+        self.assertIsNotNone(err)
+        self.assertIn("only accepted from a playbook file", err)
+
+    def test_safe_playbooks_are_accepted(self):
+        self.assertIsNone(playbooks.tool_playbook_error({
+            "id": "retry-digest", "steps": [{"verb": "rerun_job"}]}))
+
+    def test_ids_are_strict(self):
+        for bad in ("../evil", "a/b", "a\\b", "", "x" * 65, "with space"):
+            self.assertIsNotNone(playbooks.tool_playbook_error({"id": bad, "steps": []}), bad)
+
+    def test_check_runs_with_a_minimal_environment(self):
+        seen = {}
+
+        class FakeProc:
+            returncode = 0
+            stdout = "ok"
+            stderr = ""
+
+        def fake_run(argv, **kwargs):
+            seen.update(kwargs)
+            return FakeProc()
+
+        with patch.object(repair.subprocess, "run", fake_run), \
+                patch.dict(repair.os.environ, {"OPENAI_API_KEY": "sk-secret", "PATH": "/bin"}, clear=True):
+            result = repair._run_step({"verb": "check", "argv": ["true"]}, "job-1")
+        self.assertTrue(result["ok"])
+        self.assertEqual(seen["env"].get("PATH"), "/bin")
+        self.assertNotIn("OPENAI_API_KEY", seen["env"])
+
+
 class CycleStampTests(unittest.TestCase):
     def test_a_cycle_stamps_when_it_looked(self):
         import json as _json

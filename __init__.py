@@ -59,9 +59,10 @@ def _runbooks(args: Dict[str, Any], **_: Any) -> str:
         raw = args.get("playbook")
         if not isinstance(raw, dict):
             return _json({"success": False, "error": "playbook must be a JSON object"})
+        refused = playbooks.tool_playbook_error(raw)
+        if refused:
+            return _json({"success": False, "error": refused})
         pid = str(raw.get("id") or "").strip()
-        if not pid or "/" in pid or ".." in pid:
-            return _json({"success": False, "error": "playbook needs a simple 'id'"})
         folder = data_dir / "playbooks"
         folder.mkdir(parents=True, exist_ok=True)
         path = folder / f"{pid}.json"

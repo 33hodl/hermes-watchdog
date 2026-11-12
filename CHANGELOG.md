@@ -3,6 +3,21 @@
 Everything here was found by running the plugin on a real Desktop client, not by
 reading the code. Each fix is one behaviour that made a click look like a no-op.
 
+## 0.5.0
+
+Review asks from the catalog maintainer, all four closed:
+
+- **A model-authored `check` step can no longer reach the host.** `check` runs an
+  argv, so `watchdog_runbooks(action="save")` refuses any playbook containing one —
+  it is accepted only from a playbook file the user writes (or a built-in). The
+  unattended `on_session_end` path therefore cannot execute model-authored commands.
+- **`check` runs with a minimal environment** — `PATH`, `HOME`, `LANG`, plus the
+  variables that step names. Provider keys no longer reach the command.
+- **Playbook ids are validated** against `^[A-Za-z0-9_-]{1,64}$` (a backslash could
+  still escape the folder before).
+- **Repo hygiene:** `docs/triage_open_prs.py` and `docs/closed-prs-2026-11-05.md`
+  removed — not part of the plugin.
+
 ## 0.4.2
 
 - **"Preview only" actually removed.** 0.4.1's edit missed the line (a one-character
