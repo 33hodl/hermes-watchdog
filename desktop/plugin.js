@@ -441,15 +441,16 @@ function HowItWorks() {
     ['3', 'You only see the jobs it could not fix.']
   ]
 
-  return jsx('details', {
+  return jsxs('details', {
     className: 'mx-6 mb-3 rounded-md border border-(--ui-stroke-secondary)/60 bg-(--ui-bg-secondary)/40 px-4 py-2.5',
-    children: jsxs('div', {
-      className: 'grid gap-2',
-      children: [
-        jsx('summary', {
-          className: 'cursor-pointer text-[0.6875rem] font-medium tracking-wide text-(--ui-text-tertiary) uppercase',
-          children: 'How this works'
-        }),
+    children: [
+      jsx('summary', {
+        className: 'cursor-pointer text-[0.6875rem] font-medium tracking-wide text-(--ui-text-tertiary) uppercase',
+        children: 'How this works'
+      }),
+      jsxs('div', {
+        className: 'mt-2 grid gap-2',
+        children: [
         ...steps.map(([n, what]) => jsxs('div', {
           className: 'flex items-center gap-2.5',
           children: [
@@ -460,8 +461,9 @@ function HowItWorks() {
             jsx('div', { className: 'text-xs text-(--ui-text-primary)', children: what })
           ]
         }, `step-${n}`))
-      ]
-    })
+        ]
+      })
+    ]
   })
 }
 

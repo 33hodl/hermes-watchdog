@@ -3,6 +3,14 @@
 Everything here was found by running the plugin on a real Desktop client, not by
 reading the code. Each fix is one behaviour that made a click look like a no-op.
 
+## 0.4.1
+
+- **"Preview only" removed.** A dry run is the agent's tool (`watchdog_repair` with
+  `dry_run`); a second button on the page only asked the operator to choose between
+  two things they cannot tell apart.
+- **The explainer is a real fold-out.** Its summary sat inside a wrapper, so the
+  browser hoisted it and printed a default "Details" label beside it.
+
 ## 0.4.0
 
 - **"Checked N ago"** next to the health line, from a stamp the cycle writes — "All
