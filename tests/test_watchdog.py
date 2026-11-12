@@ -154,6 +154,25 @@ class CycleTests(unittest.TestCase):
         self.assertIn("handed to the operator", report["escalated"][0]["detail"])
 
 
+class CycleStampTests(unittest.TestCase):
+    def test_a_cycle_stamps_when_it_looked(self):
+        import json as _json
+        import tempfile
+        d = Path(tempfile.mkdtemp())
+        with patch.object(repair, "sources") as s, patch.object(repair, "ledger") as lg:
+            s.snapshot.return_value = {"health": "ok", "upstream": {"ok": True, "errors": []},
+                                       "counts": {"jobs": 1, "open_incidents": 0},
+                                       "jobs": [], "incidents": []}
+            repair.cycle(data_dir=d)
+        stamp = repair.last_cycle(d)
+        self.assertIsNotNone(stamp)
+        self.assertFalse(stamp["dry_run"])
+        self.assertLess(abs(stamp["checked_at"] - time.time()), 5)
+
+    def test_no_stamp_without_a_data_dir(self):
+        self.assertIsNone(repair.last_cycle(None))
+
+
 class LedgerRowShapeTests(unittest.TestCase):
     def test_last_attempt_accepts_plain_tuple_rows(self):
         class FakeConn:

@@ -3,6 +3,21 @@
 Everything here was found by running the plugin on a real Desktop client, not by
 reading the code. Each fix is one behaviour that made a click look like a no-op.
 
+## 0.4.0
+
+- **"Checked N ago"** next to the health line, from a stamp the cycle writes — "All
+  clear" with no time is unfalsifiable.
+- **Repairs are grouped per job** (latest outcome, number of attempts) instead of a
+  chronological feed, which is what invited the double-count.
+- **"How this works" collapses** behind its own summary: onboarding, not furniture.
+
+## 0.3.x
+
+- 0.3.2: a bare job id is not a name — rows read "A job that no longer exists".
+- 0.3.1: removed the duplicated all-clear copy, one line per step, repeated attempts
+  collapsed, repairs in plain words (Fixed / Handed to you / Could not fix).
+- 0.3.0: numbered how-it-works panel; "Check everything now" / "Preview only".
+
 ## 0.3.0
 
 - **A numbered "how this works" panel** on the page: what Watchdog does, why only

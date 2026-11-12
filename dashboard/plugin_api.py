@@ -48,6 +48,7 @@ class RepairRequest(BaseModel):
 async def status(job_id: Optional[str] = None) -> Dict[str, Any]:
     snap = sources.snapshot(job_id=job_id)
     snap["repairs"] = ledger.summary()
+    snap["last_cycle"] = repair.last_cycle(_data_dir())
     snap["recent_repairs"] = ledger.recent(limit=10)
     return snap
 

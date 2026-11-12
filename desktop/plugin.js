@@ -69,6 +69,23 @@ const OUTCOME_TONE = { repaired: 'good', failed: 'bad', escalated: 'warn', runni
 const POLL_MS = 15000
 const KEY = ['hermes-watchdog', 'status']
 
+function checked(ts) {
+  if (!ts) {
+    return ''
+  }
+  const seconds = Math.max(0, Math.round(Date.now() / 1000 - Number(ts)))
+  if (seconds < 90) {
+    return 'checked just now'
+  }
+  if (seconds < 3600) {
+    return 'checked ' + Math.round(seconds / 60) + ' min ago'
+  }
+  if (seconds < 86400) {
+    return 'checked ' + Math.round(seconds / 3600) + ' h ago'
+  }
+  return 'checked ' + Math.round(seconds / 86400) + ' d ago'
+}
+
 function relative(ts) {
   if (!ts) {
     return ''
@@ -210,7 +227,7 @@ function RepairRow({ repair, compact }) {
           jsx('div', {
             className: 'mt-0.5 truncate text-[0.6875rem] text-(--ui-text-tertiary)',
             children: (PLAIN_OUTCOME[repair.outcome] || repair.outcome)
-              + (repair.repeat && repair.repeat > 1 ? ' ×' + repair.repeat : '')
+              + (repair.attempts > 1 ? ' · ' + repair.attempts + ' attempts' : '')
           })
         ]
       })
@@ -218,18 +235,19 @@ function RepairRow({ repair, compact }) {
   })
 }
 
-/** Two identical attempts are one fact, not two rows: keep the newest, count it. */
-function collapseRepeats(repairs) {
-  const out = []
+/** A feed invites double-counting: group per job, newest outcome first. */
+function byJob(repairs) {
+  const groups = new Map()
   for (const repair of repairs) {
-    const last = out[out.length - 1]
-    if (last && last.job_id === repair.job_id && last.outcome === repair.outcome) {
-      last.repeat = (last.repeat || 1) + 1
+    const key = repair.job_id || repair.incident_id
+    const group = groups.get(key)
+    if (!group) {
+      groups.set(key, { ...repair, attempts: 1 })
       continue
     }
-    out.push({ ...repair, repeat: 1 })
+    group.attempts += 1
   }
-  return out
+  return Array.from(groups.values()).sort((a, b) => (b.started_at || 0) - (a.started_at || 0))
 }
 
 function SectionLabel({ children }) {
@@ -352,9 +370,12 @@ function WatchdogBody({ ctx, compact }) {
           }),
           jsx('span', {
             className: 'text-[0.6875rem] text-(--ui-text-tertiary)',
-            children: incidents.length === 0
+            children: (incidents.length === 0
               ? (counts.jobs || 0) + ' jobs'
-              : incidents.length + ' of ' + (counts.jobs || 0) + ' jobs'
+              : incidents.length + ' of ' + (counts.jobs || 0) + ' jobs')
+              + (data.last_cycle && !data.last_cycle.dry_run
+                ? ' · ' + checked(data.last_cycle.checked_at)
+                : '')
           }),
           jsx('span', { className: 'flex-1' }),
           jsx(Button, {
@@ -396,8 +417,8 @@ function WatchdogBody({ ctx, compact }) {
                   className: 'px-3 pb-3 text-[0.6875rem] text-(--ui-text-tertiary)',
                   children: 'No repair attempts recorded yet.'
                 })
-              : collapseRepeats(repairs).map(repair =>
-                  jsx(RepairRow, { compact, key: repair.incident_id + '-' + repair.started_at, repair })
+              : byJob(repairs).map(group =>
+                  jsx(RepairRow, { compact, key: group.job_id + '-' + group.started_at, repair: group })
                 ),
             data.upstream && data.upstream.ok === false
               ? jsx('div', {
@@ -420,13 +441,13 @@ function HowItWorks() {
     ['3', 'You only see the jobs it could not fix.']
   ]
 
-  return jsx('div', {
-    className: 'mx-6 mb-4 rounded-md border border-(--ui-stroke-secondary)/60 bg-(--ui-bg-secondary)/40 px-4 py-3',
+  return jsx('details', {
+    className: 'mx-6 mb-3 rounded-md border border-(--ui-stroke-secondary)/60 bg-(--ui-bg-secondary)/40 px-4 py-2.5',
     children: jsxs('div', {
       className: 'grid gap-2',
       children: [
-        jsx('div', {
-          className: 'text-[0.6875rem] font-medium tracking-wide text-(--ui-text-tertiary) uppercase',
+        jsx('summary', {
+          className: 'cursor-pointer text-[0.6875rem] font-medium tracking-wide text-(--ui-text-tertiary) uppercase',
           children: 'How this works'
         }),
         ...steps.map(([n, what]) => jsxs('div', {

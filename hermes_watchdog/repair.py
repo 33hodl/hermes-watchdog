@@ -114,6 +114,35 @@ def _ts(value: Any) -> float:
         return 0.0
 
 
+def _record_cycle(data_dir: Optional[Path], report: Dict[str, Any]) -> None:
+    """Stamp the cycle so the page can say when it last looked."""
+    if not data_dir:
+        return
+    try:
+        data_dir.mkdir(parents=True, exist_ok=True)
+        (data_dir / "last_cycle.json").write_text(
+            json.dumps({
+                "checked_at": time.time(),
+                "dry_run": bool(report.get("dry_run")),
+                "repaired": len(report.get("repaired") or []),
+                "need_you": len(report.get("escalated") or []) + len(report.get("skipped") or []),
+            }),
+            encoding="utf-8",
+        )
+    except Exception as exc:  # noqa: BLE001 - a missing stamp must not fail a repair
+        log.debug("watchdog: could not record cycle time: %s", exc)
+
+
+def last_cycle(data_dir: Optional[Path]) -> Optional[Dict[str, Any]]:
+    """When this plugin last ran a cycle, or None."""
+    if not data_dir:
+        return None
+    try:
+        return json.loads((data_dir / "last_cycle.json").read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def cycle(
     job_id: Optional[str] = None,
     dry_run: bool = False,
@@ -257,4 +286,5 @@ def cycle(
                ("escalated" if outcome == "escalated" else "failed")].append(entry)
 
     report["duration_s"] = round(time.time() - started, 2)
+    _record_cycle(data_dir, report)
     return report
