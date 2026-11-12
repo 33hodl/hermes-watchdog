@@ -3,6 +3,16 @@
 Everything here was found by running the plugin on a real Desktop client, not by
 reading the code. Each fix is one behaviour that made a click look like a no-op.
 
+## 0.2.0
+
+- **A hand-off closes itself after a day.** An incident Watchdog already handed over,
+  with no newer failure, is closed in Hermes by the next cycle instead of sitting in
+  the counter until someone clicks something.
+- **Plain language on the page.** No failure-type jargon, no incident ids in the row:
+  the pane says "It was stopped before it finished — the machine slept, or Hermes
+  restarted", the header says "1 needs a look", and the buttons are "Fix now" and
+  "Hide this".
+
 ## 0.1.8
 
 - **An incident already handed over is not escalated again.** Pressing Repair on a

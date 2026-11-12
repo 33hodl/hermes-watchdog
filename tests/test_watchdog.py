@@ -8,6 +8,7 @@ Run from the plugin root:
 from __future__ import annotations
 
 import sys
+import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -151,6 +152,38 @@ class CycleTests(unittest.TestCase):
             s.mark_alerted.assert_called_once()
         self.assertEqual(len(report["escalated"]), 1)
         self.assertIn("handed to the operator", report["escalated"][0]["detail"])
+
+
+class AutoCloseTests(unittest.TestCase):
+    def _snapshot(self):
+        return {
+            "health": "degraded", "upstream": {"ok": True, "errors": []},
+            "counts": {"jobs": 1, "open_incidents": 1},
+            "jobs": [{"job_id": "job-1", "name": "digest"}],
+            "incidents": [{"incident_id": "inc-1", "job_id": "job-1", "state": "alerted",
+                           "failure_type": "unknown", "error": "interrupted"}],
+        }
+
+    def test_a_day_old_handoff_closes_itself(self):
+        with patch.object(repair, "sources") as s, patch.object(repair, "ledger") as lg:
+            s.snapshot.return_value = self._snapshot()
+            s.job_exists.return_value = True
+            s.ack.return_value = (True, "closed")
+            lg.last_attempt.return_value = {"outcome": "escalated", "started_at": time.time() - 90000}
+            report = repair.cycle(data_dir=None)
+            s.ack.assert_called_once_with("inc-1")
+        self.assertEqual(len(report["stale"]), 1)
+        self.assertTrue(report["stale"][0]["closed"])
+
+    def test_a_fresh_handoff_is_left_alone(self):
+        with patch.object(repair, "sources") as s, patch.object(repair, "ledger") as lg:
+            s.snapshot.return_value = self._snapshot()
+            s.job_exists.return_value = True
+            lg.last_attempt.return_value = {"outcome": "escalated", "started_at": time.time() - 600}
+            report = repair.cycle(data_dir=None)
+            s.ack.assert_not_called()
+        self.assertEqual(report["stale"], [])
+        self.assertEqual(len(report["skipped"]), 1)
 
 
 class AlreadyHandedOverTests(unittest.TestCase):

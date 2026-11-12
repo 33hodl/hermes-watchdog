@@ -17,6 +17,8 @@ from . import ledger, playbooks, sources
 
 log = logging.getLogger(__name__)
 
+AUTO_CLOSE_AFTER_SECONDS = 86400
+
 MAX_JOBS_PER_CYCLE = 5          # hard cap on incidents touched in one cycle
 MAX_CYCLE_SECONDS = 120.0       # whole-cycle wall clock budget
 
@@ -144,6 +146,21 @@ def cycle(
         job = inc["job_id"]
         name = names.get(job, job)
         if inc.get("state") == "alerted" and not dry_run:
+            # A hand-off that nobody acted on for a day, with no newer failure, is
+            # noise: close it in Hermes so the fleet counter tells the truth.
+            last = ledger.last_attempt(inc["incident_id"])
+            if last and last.get("outcome") == "escalated" and \
+                    time.time() - float(last.get("started_at") or 0) >= AUTO_CLOSE_AFTER_SECONDS:
+                closed, reason = sources.ack(inc["incident_id"])
+                report["stale"].append({
+                    "incident_id": inc["incident_id"],
+                    "job_id": job,
+                    "job_name": name,
+                    "closed": closed,
+                    "reason": "handed over a day ago with nothing new" + (
+                        "" if closed else f" — could not close: {reason}"),
+                })
+                continue
             # Already handed to the operator: escalating again just stacks identical
             # ledger rows and nags on every click. Say so once instead.
             report["skipped"].append({

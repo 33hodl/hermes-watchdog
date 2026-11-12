@@ -1,5 +1,5 @@
 name: hermes-watchdog
-version: 0.1.8
+version: 0.2.0
 label: Hermes Watchdog
 description: "Cron jobs that fix themselves: playbook repairs, verification and an incident ledger instead of repeated failure pings."
 author: 33hodl

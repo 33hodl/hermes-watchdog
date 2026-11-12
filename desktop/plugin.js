@@ -29,7 +29,33 @@ const SIDEBAR_NAV_AREA = 'sidebar.nav'
 const PAGE_PATH = '/watchdog'
 
 const TONE = { ok: 'good', degraded: 'warn', critical: 'bad', unknown: 'muted' }
-const HEALTH_LABEL = { ok: 'healthy', degraded: 'degraded', critical: 'critical', unknown: 'no data' }
+const HEALTH_LABEL = {
+  ok: 'All clear',
+  degraded: 'Needs a look',
+  critical: 'Needs a look',
+  unknown: 'Not sure yet'
+}
+
+// Jargon out: a person reading the pane should not need to know what Hermes calls
+// each failure class.
+const PLAIN_CAUSE = {
+  timeout: 'It ran too long and was stopped.',
+  delivery: 'The message it sends did not go out.',
+  agent: 'The assistant hit an error while running it.',
+  script: 'Its script exited with an error.',
+  auth: 'It could not sign in to something it needs.',
+  config: 'Its settings are wrong or missing.',
+  interrupted: 'It was stopped before it finished — the machine slept, or Hermes restarted.',
+  unknown: 'Hermes recorded a failure but no details.'
+}
+
+function plainCause(incident) {
+  const error = String((incident && incident.error) || '').toLowerCase()
+  if (error.includes('interrupt')) {
+    return PLAIN_CAUSE.interrupted
+  }
+  return PLAIN_CAUSE[(incident && incident.failure_type) || 'unknown'] || PLAIN_CAUSE.unknown
+}
 const OUTCOME_TONE = { repaired: 'good', failed: 'bad', escalated: 'warn', running: 'muted' }
 
 const POLL_MS = 15000
@@ -102,27 +128,20 @@ function IncidentRow({ incident, onRepair, onAck, busy, compact }) {
             children: [
               jsx('span', {
                 className: 'truncate text-xs font-medium text-(--ui-text-primary)',
-                children: incident.job_name || incident.job_id
-              }),
-              jsx(Badge, { variant: incident.state === 'alerted' ? 'warn' : 'muted', children: incident.failure_type }),
-              jsx('span', {
-                className: 'shrink-0 font-mono text-[0.625rem] text-(--ui-text-quaternary)',
-                children: incident.incident_id
-              }),
-              incident.state === 'alerted'
-                ? jsx(Badge, { variant: 'warn', children: 'needs you' })
-                : null
+                title: incident.incident_id,
+                children: incident.job_name || 'A background job'
+              })
             ]
           }),
           jsx('div', {
             className: 'mt-0.5 line-clamp-2 text-[0.6875rem] leading-4 text-(--ui-text-tertiary)',
-            children: incident.error || 'no error text recorded'
+            children: plainCause(incident)
           }),
           jsx('div', {
             className: 'mt-1 text-[0.6875rem] leading-4 text-(--ui-text-quaternary)',
             children: incident.state === 'alerted'
-              ? 'Handed to you: check that job’s last run, then Ack. Ack keeps it quiet until the same error returns.'
-              : 'Repair runs the matching fix. Nothing gets fixed? Check the job’s last run, then Ack to close it.'
+              ? 'Watchdog already tried. Nothing will change on its own — hide this once you have looked.'
+              : 'Press Fix now and Watchdog will try the repair that matches this failure.'
           })
         ]
       }),
@@ -134,15 +153,15 @@ function IncidentRow({ incident, onRepair, onAck, busy, compact }) {
             onClick: () => onRepair(incident.job_id),
             size: 'xs',
             variant: 'secondary',
-            children: 'Repair'
+            children: 'Fix now'
           }),
           jsx(Button, {
             disabled: busy,
             onClick: () => onAck(incident.incident_id),
             size: 'xs',
             variant: 'ghost',
-            title: 'Close this incident — quiet until the same error returns',
-            children: 'Ack'
+            title: 'Hide this and stay quiet unless the same error happens again',
+            children: 'Hide this'
           })
         ]
       })
@@ -224,7 +243,7 @@ function WatchdogBody({ ctx, compact }) {
       const handoffs = attempts.filter(a => (a.steps || []).includes('escalate')).length + skipped
       message = attempts.length + skipped === 0
         ? 'Watchdog plan: nothing open, nothing to do'
-        : 'Watchdog plan: ' + repairs + ' to repair, ' + handoffs + ' to hand to you'
+        : 'If you press Fix now: ' + repairs + ' would be fixed, ' + handoffs + ' would stay with you'
     } else if (fixed + failed + escalated + skipped + stale === 0) {
       message = 'Hermes Watchdog: nothing open, nothing to do'
     } else {
@@ -232,10 +251,10 @@ function WatchdogBody({ ctx, compact }) {
       // that is a hand-off, never silence.
       const lists = ((report && report.escalated) || []).concat((report && report.skipped) || [])
       const unrecorded = lists.filter(item => item.handed_over === false).length
-      message = 'Hermes Watchdog: ' + fixed + ' repaired'
-        + (escalated + skipped ? ' · ' + (escalated + skipped) + ' need you' : '')
-        + (staleClosed ? ' · ' + staleClosed + ' closed (job deleted)' : '')
-        + (failed ? ' · ' + failed + ' failed' : '')
+      message = 'Hermes Watchdog: ' + fixed + ' fixed'
+        + (escalated + skipped ? ' · ' + (escalated + skipped) + ' still need you' : '')
+        + (staleClosed ? ' · ' + staleClosed + ' tidied away' : '')
+        + (failed ? ' · ' + failed + ' could not be fixed' : '')
         + (unrecorded ? ' · handoff not recorded in Hermes (cron store refused)' : '')
     }
 
@@ -255,7 +274,7 @@ function WatchdogBody({ ctx, compact }) {
     host.notify({
       kind: result && result.closed ? 'success' : 'warning',
       message: result && result.closed
-        ? 'Incident acknowledged — quiet until the same error returns'
+        ? 'Hidden — you will only hear about it if this happens again'
         : (result && result.error && String(result.error).includes('404')
             ? 'This plugin build is not loaded in the gateway yet — restart the gateway (hermes gateway restart), then reload'
             : 'Could not close it: ' + ((result && result.reason) || 'no reason returned (restart the gateway so the new route loads)'))
@@ -302,9 +321,10 @@ function WatchdogBody({ ctx, compact }) {
           }),
           jsx('span', {
             className: 'text-[0.6875rem] text-(--ui-text-tertiary)',
-            children: (counts.jobs || 0) + ' jobs · ' + incidents.length + ' open'
-              + (counts.needs_you ? ' · ' + counts.needs_you + ' need you' : '')
-              + ' · ' + (summary.repaired_7d || 0) + ' repaired/7d'
+            children: incidents.length === 0
+              ? (counts.jobs || 0) + ' jobs, all fine'
+              : (counts.jobs || 0) + ' jobs · ' + incidents.length
+                + (incidents.length === 1 ? ' needs a look' : ' need a look')
           }),
           jsx('span', { className: 'flex-1' }),
           jsx(Button, {
@@ -327,7 +347,7 @@ function WatchdogBody({ ctx, compact }) {
         ? null
         : jsx('div', {
             className: 'px-3 pb-1 text-[0.6875rem] leading-4 text-(--ui-text-quaternary)',
-            children: 'Green means there is nothing to do. On an open incident, Repair runs the playbook that matches the failure — and when it cannot fix the job, it pauses it and hands it to you here.'
+            children: 'Watchdog fixes what it can by itself. You only see a job here when it could not fix it and needs you to look.'
           }),
       jsx(ScrollArea, {
         className: 'min-h-0 flex-1',

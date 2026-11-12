@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import sqlite3
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Optional
 
 log = logging.getLogger(__name__)
 
@@ -71,6 +71,17 @@ def attempts_today(incident_id: str) -> int:
         (incident_id, time.time() - 86400),
     ).fetchone()
     return int(row[0]) if row else 0
+
+
+def last_attempt(incident_id: str) -> Optional[Dict[str, Any]]:
+    """The newest attempt for one incident, or None. Drives the auto-close rule."""
+    conn = _conn()
+    row = conn.execute(
+        "SELECT incident_id, job_id, job_name, playbook, started_at, outcome, detail "
+        "FROM repairs WHERE incident_id = ? ORDER BY started_at DESC LIMIT 1",
+        (incident_id,),
+    ).fetchone()
+    return dict(row) if row else None
 
 
 def recent(limit: int = 20) -> List[Dict[str, Any]]:
