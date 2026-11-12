@@ -242,10 +242,10 @@ function WatchdogBody({ ctx, compact }) {
       const repairs = attempts.filter(a => !(a.steps || []).includes('escalate')).length
       const handoffs = attempts.filter(a => (a.steps || []).includes('escalate')).length + skipped
       message = attempts.length + skipped === 0
-        ? 'Watchdog plan: nothing open, nothing to do'
+        ? 'Nothing to fix — every scheduled job ran clean'
         : 'If you press Fix now: ' + repairs + ' would be fixed, ' + handoffs + ' would stay with you'
     } else if (fixed + failed + escalated + skipped + stale === 0) {
-      message = 'Hermes Watchdog: nothing open, nothing to do'
+      message = 'Nothing to fix — every scheduled job ran clean'
     } else {
       // A skipped incident is only 'skipped' because today's attempts are spent —
       // that is a hand-off, never silence.
@@ -339,8 +339,8 @@ function WatchdogBody({ ctx, compact }) {
       jsxs('div', {
         className: 'flex items-center gap-1.5 px-3 py-2',
         children: [
-          jsx(Button, { onClick: () => run(null, false), size: 'xs', variant: 'default', children: 'Run repair cycle' }),
-          jsx(Button, { onClick: () => run(null, true), size: 'xs', variant: 'secondary', children: 'Plan only' })
+          jsx(Button, { onClick: () => run(null, false), size: 'xs', variant: 'default', children: 'Check everything now' }),
+          jsx(Button, { onClick: () => run(null, true), size: 'xs', variant: 'secondary', children: 'Preview only' })
         ]
       }),
       compact
@@ -355,7 +355,7 @@ function WatchdogBody({ ctx, compact }) {
           children: [
             jsx(SectionLabel, { children: 'Open incidents' }),
             incidents.length === 0
-              ? jsx(EmptyState, { description: 'Every cron job is running clean.', title: 'Nothing to fix' })
+              ? jsx(EmptyState, { description: 'Every scheduled job ran clean. Nothing needs you.', title: 'Nothing to fix' })
               : incidents.map(incident =>
                   jsx(IncidentRow, {
                     busy: isFetching,
@@ -388,6 +388,47 @@ function WatchdogBody({ ctx, compact }) {
   })
 }
 
+/** Three numbered steps: what happens, and why it matters. */
+function HowItWorks() {
+  const steps = [
+    ['1', 'Watchdog checks every scheduled job after it runs.',
+      'A job that fails at 3am otherwise goes unnoticed until the work is already late.'],
+    ['2', 'When one fails, it applies the fix that matches the failure, then checks the next run.',
+      'A retry that fails again is not a fix — so only Hermes’s own run record counts as repaired.'],
+    ['3', 'You only see what it could not fix.',
+      'If a job shows up here, look at its last run and press Fix now, or Hide this to close the note.']
+  ]
+
+  return jsx('div', {
+    className: 'mx-6 mb-4 rounded-md border border-(--ui-stroke-secondary)/60 bg-(--ui-bg-secondary)/40 px-4 py-3',
+    children: jsxs('div', {
+      className: 'grid gap-2',
+      children: [
+        jsx('div', {
+          className: 'text-[0.6875rem] font-medium tracking-wide text-(--ui-text-tertiary) uppercase',
+          children: 'How this works'
+        }),
+        ...steps.map(([n, what, why]) => jsxs('div', {
+          className: 'flex items-start gap-2.5',
+          children: [
+            jsx('div', {
+              className: 'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-(--ui-stroke-secondary) text-[0.6875rem] text-(--ui-text-secondary)',
+              children: n
+            }),
+            jsxs('div', {
+              className: 'min-w-0',
+              children: [
+                jsx('div', { className: 'text-xs text-(--ui-text-primary)', children: what }),
+                jsx('div', { className: 'text-[0.6875rem] leading-4 text-(--ui-text-tertiary)', children: why })
+              ]
+            })
+          ]
+        }, `step-${n}`))
+      ]
+    })
+  })
+}
+
 /** The sidebar page — full width, same report, works on every layout. */
 function WatchdogPage({ ctx }) {
   return jsxs('div', {
@@ -403,6 +444,7 @@ function WatchdogPage({ ctx }) {
           })
         ]
       }),
+      jsx(HowItWorks, {}),
       jsx('div', {
         className: 'mx-6 mb-4 min-h-0 flex-1 overflow-hidden rounded-md border border-(--ui-stroke-secondary)',
         children: jsx(WatchdogBody, { compact: false, ctx })

@@ -28,7 +28,7 @@ Most days: nothing. The plugin’s job is to leave you alone.
 
 | What you see | What you do |
 | --- | --- |
-| Green dot, `0 open` | Nothing. Repairs already ran and were verified. |
+| `All clear` | Nothing. Repairs already ran and were verified. |
 | An incident row | Press **Fix now** on that row — Watchdog runs the repair that matches the failure. |
 | A row that says it needs you | Watchdog could not fix it — no playbook for that failure, or today's attempt limit is spent. The job is paused where that helps, the incident is marked `alerted` in Hermes itself, and the row says what it tried. Check that job's last run, then press **Ack** — it stays quiet until the same error returns. This is the only case that needs a person. |
 | **Plan only** | Dry run: shows what a cycle would do without touching anything. |

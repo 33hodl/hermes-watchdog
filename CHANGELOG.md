@@ -3,6 +3,14 @@
 Everything here was found by running the plugin on a real Desktop client, not by
 reading the code. Each fix is one behaviour that made a click look like a no-op.
 
+## 0.3.0
+
+- **A numbered "how this works" panel** on the page: what Watchdog does, why only
+  Hermes's own record counts as a repair, and why you only see what it could not
+  fix.
+- **Plainer controls**: "Check everything now", "Preview only", and an empty state
+  that says every scheduled job ran clean.
+
 ## 0.2.0
 
 - **A hand-off closes itself after a day.** An incident Watchdog already handed over,
