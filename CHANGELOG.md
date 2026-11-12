@@ -3,6 +3,14 @@
 Everything here was found by running the plugin on a real Desktop client, not by
 reading the code. Each fix is one behaviour that made a click look like a no-op.
 
+## 0.5.2
+
+- **The dashboard stops 500-ing on a checkout without core.** The ledger imported the
+  host's `plugins.plugin_storage` unguarded, so `/status` raised `ModuleNotFoundError`
+  on any bare checkout — every CI run, and any reviewer running the route tests. It now
+  falls back to a plugin-local ledger file under `plugin-data/`, the same degradation
+  `_data_dir()` already had, so the pane shows "no repairs yet" instead of an error.
+
 ## 0.5.1
 
 - **The status-bar chip is a signal now, not a label.** It appears only when at least
