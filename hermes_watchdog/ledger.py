@@ -8,9 +8,11 @@ from becoming a second failure mode. It also feeds the pane's recent-activity li
 from __future__ import annotations
 
 import logging
+import os
 import sqlite3
 import time
-from typing import Any, Dict, List, Optional, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 log = logging.getLogger(__name__)
 
@@ -34,9 +36,40 @@ CREATE INDEX IF NOT EXISTS repairs_started ON repairs(started_at);
 """
 
 
+def _fallback_db_path() -> Path:
+    """Where the ledger lives when the host's plugin storage is unavailable.
+
+    A bare checkout (CI, a reviewer running the tests, a host build that renamed
+    `plugins.plugin_storage`) has no core storage module. Falling back to a file
+    under `$HERMES_HOME/plugin-data/<plugin>/` keeps the ledger and the pane
+    working instead of raising on every dashboard request.
+    """
+    base = os.environ.get("HERMES_HOME")
+    root = Path(base) if base else Path.home() / ".hermes"
+    return root / "plugin-data" / PLUGIN_ID / "ledger.db"
+
+
+_CORE_STORAGE_WARNED = False
+
+
 def _conn() -> sqlite3.Connection:
-    from plugins.plugin_storage import plugin_db
-    conn = plugin_db(PLUGIN_ID)
+    global _CORE_STORAGE_WARNED
+    try:
+        from plugins.plugin_storage import plugin_db
+    except Exception:  # noqa: BLE001 - a bare checkout has no core storage module
+        plugin_db = None
+    if plugin_db is not None:
+        conn = plugin_db(PLUGIN_ID)
+    else:
+        if not _CORE_STORAGE_WARNED:
+            log.warning(
+                "watchdog: host plugin storage unavailable; ledger is plugin-local at %s",
+                _fallback_db_path(),
+            )
+            _CORE_STORAGE_WARNED = True
+        path = _fallback_db_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(path)
     conn.executescript(_SCHEMA)
     return conn
 

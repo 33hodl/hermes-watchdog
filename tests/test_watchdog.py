@@ -7,7 +7,9 @@ Run from the plugin root:
 
 from __future__ import annotations
 
+import os
 import sys
+import tempfile
 import time
 import unittest
 from pathlib import Path
@@ -206,6 +208,25 @@ class CycleStampTests(unittest.TestCase):
 
     def test_no_stamp_without_a_data_dir(self):
         self.assertIsNone(repair.last_cycle(None))
+
+
+class LedgerWithoutHostStorageTests(unittest.TestCase):
+    """A bare checkout has no `plugins.plugin_storage`; the ledger must still work.
+
+    This is the CI shape, and it is why a review round shipped a red badge: the
+    dashboard route calls the ledger, the ledger imported core storage unguarded, so
+    `/status` returned 500 in CI while passing on any machine that has core.
+    """
+
+    def test_summary_and_recent_survive_a_missing_core_storage(self):
+        from hermes_watchdog import ledger
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.dict(os.environ, {"HERMES_HOME": tmp}):
+                with patch.dict(sys.modules, {"plugins.plugin_storage": None}):
+                    self.assertEqual(ledger.summary()["repaired_7d"], 0)
+                    self.assertEqual(ledger.recent(limit=5), [])
+                    self.assertTrue((Path(tmp) / "plugin-data" / "hermes-watchdog" / "ledger.db").exists())
 
 
 class LedgerRowShapeTests(unittest.TestCase):

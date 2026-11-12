@@ -9,6 +9,8 @@ raised PydanticUserError. Keep the import shape identical to the host's.
 from __future__ import annotations
 
 import importlib.util
+import os
+import tempfile
 import sys
 import unittest
 from pathlib import Path
@@ -35,9 +37,17 @@ class DashboardApiTests(unittest.TestCase):
             from fastapi.testclient import TestClient
         except Exception:  # noqa: BLE001 - hermes venv not present in a bare checkout
             raise unittest.SkipTest("fastapi not installed")
+        # The routes touch the ledger, which falls back to $HERMES_HOME when the host's
+        # plugin storage is absent. Keep that write inside a temp dir, not the real home.
+        cls._home = tempfile.TemporaryDirectory()
+        os.environ["HERMES_HOME"] = cls._home.name
         app = FastAPI()
         app.include_router(_load_router(), prefix="/api/plugins/hermes-watchdog")
         cls.client = TestClient(app)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._home.cleanup()
 
     def test_status_returns_the_snapshot_shape(self):
         response = self.client.get("/api/plugins/hermes-watchdog/status")
