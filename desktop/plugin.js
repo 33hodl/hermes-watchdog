@@ -169,6 +169,13 @@ function IncidentRow({ incident, onRepair, onAck, busy, compact }) {
   })
 }
 
+const PLAIN_OUTCOME = {
+  repaired: 'Fixed',
+  escalated: 'Handed to you',
+  failed: 'Could not fix',
+  running: 'Trying now'
+}
+
 function RepairRow({ repair, compact }) {
   return jsxs('div', {
     className: cn('flex items-start gap-2 border-b border-(--ui-stroke-secondary)/40 px-3 last:border-b-0',
@@ -193,12 +200,27 @@ function RepairRow({ repair, compact }) {
           }),
           jsx('div', {
             className: 'mt-0.5 truncate text-[0.6875rem] text-(--ui-text-tertiary)',
-            children: repair.playbook + ' · ' + repair.outcome + (repair.detail ? ' — ' + repair.detail : '')
+            children: (PLAIN_OUTCOME[repair.outcome] || repair.outcome)
+              + (repair.repeat && repair.repeat > 1 ? ' ×' + repair.repeat : '')
           })
         ]
       })
     ]
   })
+}
+
+/** Two identical attempts are one fact, not two rows: keep the newest, count it. */
+function collapseRepeats(repairs) {
+  const out = []
+  for (const repair of repairs) {
+    const last = out[out.length - 1]
+    if (last && last.job_id === repair.job_id && last.outcome === repair.outcome) {
+      last.repeat = (last.repeat || 1) + 1
+      continue
+    }
+    out.push({ ...repair, repeat: 1 })
+  }
+  return out
 }
 
 function SectionLabel({ children }) {
@@ -322,9 +344,8 @@ function WatchdogBody({ ctx, compact }) {
           jsx('span', {
             className: 'text-[0.6875rem] text-(--ui-text-tertiary)',
             children: incidents.length === 0
-              ? (counts.jobs || 0) + ' jobs, all fine'
-              : (counts.jobs || 0) + ' jobs · ' + incidents.length
-                + (incidents.length === 1 ? ' needs a look' : ' need a look')
+              ? (counts.jobs || 0) + ' jobs'
+              : incidents.length + ' of ' + (counts.jobs || 0) + ' jobs'
           }),
           jsx('span', { className: 'flex-1' }),
           jsx(Button, {
@@ -343,19 +364,13 @@ function WatchdogBody({ ctx, compact }) {
           jsx(Button, { onClick: () => run(null, true), size: 'xs', variant: 'secondary', children: 'Preview only' })
         ]
       }),
-      compact
-        ? null
-        : jsx('div', {
-            className: 'px-3 pb-1 text-[0.6875rem] leading-4 text-(--ui-text-quaternary)',
-            children: 'Watchdog fixes what it can by itself. You only see a job here when it could not fix it and needs you to look.'
-          }),
       jsx(ScrollArea, {
         className: 'min-h-0 flex-1',
         children: jsxs('div', {
           children: [
             jsx(SectionLabel, { children: 'Open incidents' }),
             incidents.length === 0
-              ? jsx(EmptyState, { description: 'Every scheduled job ran clean. Nothing needs you.', title: 'Nothing to fix' })
+              ? jsx(EmptyState, { title: 'Nothing to fix' })
               : incidents.map(incident =>
                   jsx(IncidentRow, {
                     busy: isFetching,
@@ -372,7 +387,7 @@ function WatchdogBody({ ctx, compact }) {
                   className: 'px-3 pb-3 text-[0.6875rem] text-(--ui-text-tertiary)',
                   children: 'No repair attempts recorded yet.'
                 })
-              : repairs.map(repair =>
+              : collapseRepeats(repairs).map(repair =>
                   jsx(RepairRow, { compact, key: repair.incident_id + '-' + repair.started_at, repair })
                 ),
             data.upstream && data.upstream.ok === false
@@ -391,12 +406,9 @@ function WatchdogBody({ ctx, compact }) {
 /** Three numbered steps: what happens, and why it matters. */
 function HowItWorks() {
   const steps = [
-    ['1', 'Watchdog checks every scheduled job after it runs.',
-      'A job that fails at 3am otherwise goes unnoticed until the work is already late.'],
-    ['2', 'When one fails, it applies the fix that matches the failure, then checks the next run.',
-      'A retry that fails again is not a fix — so only Hermes’s own run record counts as repaired.'],
-    ['3', 'You only see what it could not fix.',
-      'If a job shows up here, look at its last run and press Fix now, or Hide this to close the note.']
+    ['1', 'It checks every scheduled job after it runs.'],
+    ['2', 'A job that fails gets the matching fix, and only counts as fixed if its next run succeeds.'],
+    ['3', 'You only see the jobs it could not fix.']
   ]
 
   return jsx('div', {
@@ -408,20 +420,14 @@ function HowItWorks() {
           className: 'text-[0.6875rem] font-medium tracking-wide text-(--ui-text-tertiary) uppercase',
           children: 'How this works'
         }),
-        ...steps.map(([n, what, why]) => jsxs('div', {
-          className: 'flex items-start gap-2.5',
+        ...steps.map(([n, what]) => jsxs('div', {
+          className: 'flex items-center gap-2.5',
           children: [
             jsx('div', {
-              className: 'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-(--ui-stroke-secondary) text-[0.6875rem] text-(--ui-text-secondary)',
+              className: 'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-(--ui-stroke-secondary) text-[0.6875rem] text-(--ui-text-secondary)',
               children: n
             }),
-            jsxs('div', {
-              className: 'min-w-0',
-              children: [
-                jsx('div', { className: 'text-xs text-(--ui-text-primary)', children: what }),
-                jsx('div', { className: 'text-[0.6875rem] leading-4 text-(--ui-text-tertiary)', children: why })
-              ]
-            })
+            jsx('div', { className: 'text-xs text-(--ui-text-primary)', children: what })
           ]
         }, `step-${n}`))
       ]
