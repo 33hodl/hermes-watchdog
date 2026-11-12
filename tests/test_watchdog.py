@@ -153,6 +153,25 @@ class CycleTests(unittest.TestCase):
         self.assertIn("handed to the operator", report["escalated"][0]["detail"])
 
 
+class AlreadyHandedOverTests(unittest.TestCase):
+    def test_alerted_incident_is_not_escalated_twice(self):
+        with patch.object(repair, "sources") as s, patch.object(repair, "ledger") as lg, \
+                patch.object(repair, "playbooks") as pb:
+            s.snapshot.return_value = {
+                "health": "degraded", "upstream": {"ok": True, "errors": []},
+                "counts": {"jobs": 1, "open_incidents": 1},
+                "jobs": [{"job_id": "job-1", "name": "digest"}],
+                "incidents": [{"incident_id": "inc-1", "job_id": "job-1",
+                               "state": "alerted", "failure_type": "unknown", "error": "interrupted"}],
+            }
+            s.job_exists.return_value = True
+            report = repair.cycle(data_dir=None)
+            pb.match_playbook.assert_not_called()
+            lg.start_attempt.assert_not_called()
+        self.assertEqual(len(report["skipped"]), 1)
+        self.assertIn("already handed", report["skipped"][0]["reason"])
+
+
 class OrphanedIncidentTests(unittest.TestCase):
     def test_incident_for_a_deleted_job_is_closed_not_repaired(self):
         with patch.object(repair, "sources") as s, patch.object(repair, "ledger") as lg, \

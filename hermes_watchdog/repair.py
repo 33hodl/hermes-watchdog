@@ -143,6 +143,17 @@ def cycle(
             continue
         job = inc["job_id"]
         name = names.get(job, job)
+        if inc.get("state") == "alerted" and not dry_run:
+            # Already handed to the operator: escalating again just stacks identical
+            # ledger rows and nags on every click. Say so once instead.
+            report["skipped"].append({
+                "incident_id": inc["incident_id"],
+                "job_id": job,
+                "job_name": name,
+                "handed_over": True,
+                "reason": "already handed to you — Ack it when handled",
+            })
+            continue
         if sources.job_exists(job) is False:
             # Nothing to repair and nothing will ever recover it: the job is gone.
             closed, reason = sources.ack(inc["incident_id"])

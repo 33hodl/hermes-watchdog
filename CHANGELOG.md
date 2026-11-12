@@ -3,6 +3,15 @@
 Everything here was found by running the plugin on a real Desktop client, not by
 reading the code. Each fix is one behaviour that made a click look like a no-op.
 
+## 0.1.8
+
+- **An incident already handed over is not escalated again.** Pressing Repair on a
+  `needs you` row used to append an identical `escalated` line every time; it now
+  reports `already handed to you — Ack it when handled`.
+- **The UI tells a stale gateway apart from a refusal.** A `404` on `/ack` now says
+  "plugin build is not loaded in the gateway yet — restart the gateway", instead of
+  implying the cron store refused.
+
 ## 0.1.7
 
 - **An incident whose job was deleted now closes itself.** Core closes an incident

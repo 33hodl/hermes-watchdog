@@ -256,7 +256,9 @@ function WatchdogBody({ ctx, compact }) {
       kind: result && result.closed ? 'success' : 'warning',
       message: result && result.closed
         ? 'Incident acknowledged — quiet until the same error returns'
-        : 'Could not close it: ' + ((result && result.reason) || 'the cron store refused')
+        : (result && result.error && String(result.error).includes('404')
+            ? 'This plugin build is not loaded in the gateway yet — restart the gateway (hermes gateway restart), then reload'
+            : 'Could not close it: ' + ((result && result.reason) || 'no reason returned (restart the gateway so the new route loads)'))
     })
     client.invalidateQueries({ queryKey: KEY })
   }
