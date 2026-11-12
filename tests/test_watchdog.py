@@ -154,6 +154,22 @@ class CycleTests(unittest.TestCase):
         self.assertIn("handed to the operator", report["escalated"][0]["detail"])
 
 
+class LedgerRowShapeTests(unittest.TestCase):
+    def test_last_attempt_accepts_plain_tuple_rows(self):
+        class FakeConn:
+            def execute(self, *a, **k):
+                return self
+
+            def fetchone(self):
+                return ("inc-1", "job-1", "digest", "builtin-rerun-timeout", 1000.0, "escalated", "detail")
+
+        from hermes_watchdog import ledger as real_ledger
+        with patch.object(real_ledger, "_conn", lambda: FakeConn()):
+            row = real_ledger.last_attempt("inc-1")
+        self.assertEqual(row["incident_id"], "inc-1")
+        self.assertEqual(row["outcome"], "escalated")
+
+
 class AutoCloseTests(unittest.TestCase):
     def _snapshot(self):
         return {

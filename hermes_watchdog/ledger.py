@@ -81,7 +81,11 @@ def last_attempt(incident_id: str) -> Optional[Dict[str, Any]]:
         "FROM repairs WHERE incident_id = ? ORDER BY started_at DESC LIMIT 1",
         (incident_id,),
     ).fetchone()
-    return dict(row) if row else None
+    if not row:
+        return None
+    # plugin_db hands back plain tuples (see recent()); dict(row) would raise.
+    keys = ("incident_id", "job_id", "job_name", "playbook", "started_at", "outcome", "detail")
+    return dict(zip(keys, row))
 
 
 def recent(limit: int = 20) -> List[Dict[str, Any]]:
