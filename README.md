@@ -11,6 +11,7 @@ take.
 hermes plugins install hermes-watchdog
 ```
 
+**Demo (60s):** https://x.com/DiamondHandsDig/status/2119784656522588328
 No API keys, no services, no Python dependencies. It reads your local cron store
 and drives Hermes's own cron tool.
 
