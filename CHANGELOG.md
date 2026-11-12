@@ -3,6 +3,13 @@
 Everything here was found by running the plugin on a real Desktop client, not by
 reading the code. Each fix is one behaviour that made a click look like a no-op.
 
+## 0.5.1
+
+- **The status-bar chip is a signal now, not a label.** It appears only when at least
+  one incident needs a look (`● watchdog 2`), and disappears when everything is fine.
+  A permanent "watchdog" with no number told you nothing and cost a status-bar slot;
+  the sidebar row remains the always-present door.
+
 ## 0.5.0
 
 Review asks from the catalog maintainer, all four closed:

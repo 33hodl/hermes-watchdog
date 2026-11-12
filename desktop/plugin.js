@@ -126,15 +126,21 @@ function Chip({ ctx }) {
   // Clickable: the chip is the one surface present on every layout, so it is the
   // guaranteed door to the page when a layout has no right zone (or a client build
   // predates the sidebar.nav area).
+  // The status bar is for signals, not labels: say nothing while everything is fine.
+  // The sidebar row is the always-present door to the page.
+  if (incidents === 0) {
+    return null
+  }
+
   return jsxs('button', {
     className: cn('inline-flex h-full cursor-pointer items-center gap-1 px-1.5 text-[0.6875rem]',
-      'text-(--ui-text-tertiary) hover:text-(--ui-text-secondary)'),
+      'text-(--ui-text-warning) hover:text-(--ui-text-primary)'),
     onClick: () => host.navigate(PAGE_PATH),
-    title: 'Open Hermes Watchdog',
+    title: incidents + ' scheduled job' + (incidents === 1 ? '' : 's') + ' need a look — open Watchdog',
     type: 'button',
     children: [
       jsx(StatusDot, { tone: TONE[health] || 'muted' }),
-      jsx('span', { children: incidents > 0 ? 'watchdog ' + incidents : 'watchdog' })
+      jsx('span', { children: 'watchdog ' + incidents })
     ]
   })
 }
