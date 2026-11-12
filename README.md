@@ -7,13 +7,26 @@ you. Hermes Watchdog notices, tries the fix that fits the failure, then checks
 whether the next run actually worked. You only hear about it when the fix didn't
 take.
 
-```
+```bash
+# from the catalog — tracks the catalog pin, so `hermes update` keeps it current
 hermes plugins install hermes-watchdog
+
+# before it is merged, or to pin one exact version:
+# installs like this are *held* — only `hermes plugins update hermes-watchdog` moves them
+hermes plugins install 33hodl/hermes-watchdog --ref <commit-sha> --enable
 ```
 
 **Demo (60s):** https://x.com/DiamondHandsDig/status/2119784656522588328
 No API keys, no services, no Python dependencies. It reads your local cron store
 and drives Hermes's own cron tool.
+
+## Keeping it current
+
+Catalog installs follow the catalog pin, so Hermes's own `hermes update` brings
+the next version — including to anyone with `plugins.auto_apply: true`, which
+applies updates unattended. A version that adds a tool, hook or capability still
+asks for consent first, by design. Installs made with `--ref` are held on that
+commit and only move when you run `hermes plugins update hermes-watchdog`.
 
 ## The problem it solves
 
@@ -29,10 +42,10 @@ Most days: nothing. The plugin’s job is to leave you alone.
 
 | What you see | What you do |
 | --- | --- |
-| `All clear` | Nothing. Repairs already ran and were verified. |
-| An incident row | Press **Fix now** on that row — Watchdog runs the repair that matches the failure. |
-| A row that says it needs you | Watchdog could not fix it — no playbook for that failure, or today's attempt limit is spent. The job is paused where that helps, the incident is marked `alerted` in Hermes itself, and the row says what it tried. Check that job's last run, then press **Ack** — it stays quiet until the same error returns. This is the only case that needs a person. |
-| **Plan only** | Dry run: shows what a cycle would do without touching anything. |
+| `All clear · N jobs · checked just now` | Nothing. Repairs already ran and were verified. |
+| An incident row | Press **Ack** once you have looked. It stays quiet until the same error returns. |
+| A row that says **Handed to you** | Watchdog could not fix it — no playbook for that failure, or today's attempt limit is spent. The job is paused where that helps and the incident is marked `alerted` in Hermes itself. This is the only case that needs a person. |
+| **Check everything now** | Runs a check and fixes whatever it can. Nothing else to press. |
 
 The same things are reachable without the UI: `watchdog_status`, `watchdog_repair`
 (with `dry_run`), `/watchdog` in any Hermes chat, and `hermes cron incidents ack
