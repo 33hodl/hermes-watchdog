@@ -3,6 +3,21 @@
 Everything here was found by running the plugin on a real Desktop client, not by
 reading the code. Each fix is one behaviour that made a click look like a no-op.
 
+## 0.5.5
+
+- **The demo writes into the profile you are looking at.** `demo.py` read
+  `os.environ["HERMES_HOME"]`, which is pinned when Hermes starts; in a process that
+  serves several profiles the demo could drop its script into the wrong one. It now
+  asks `hermes_constants.get_hermes_home` (context-local override first), falling
+  back to the env var only when core does not expose the helper. Two tests cover it.
+- **README: the private flag is named as private.** The synchronous rerun path sets
+  core's `gateway.session_context._SESSION_ASYNC_DELIVERY`; the README now says that
+  name is outside the published plugin API and may change without notice.
+- **README: the demo's footprint is spelled out.** The demo writes a no-agent cron
+  job and an executable script (mode 0755) under `$HERMES_HOME/scripts`; both are
+  removed at the end, and if Hermes stops mid-demo both stay behind and are named so
+  the owner can delete them.
+
 ## 0.5.4
 
 - **A rerun now actually runs before it is verified.** `builtin-rerun-timeout` queued the

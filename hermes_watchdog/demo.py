@@ -41,8 +41,18 @@ echo "pricing feed synced"
 
 
 def _home() -> Path:
-    base = os.environ.get("HERMES_HOME")
-    return Path(base) if base else Path.home() / ".hermes"
+    """The active profile's home, not the one this process was launched with.
+
+    ``os.environ["HERMES_HOME"]`` is pinned when Hermes starts, so a process that
+    serves several profiles would write the demo's script into the wrong one.
+    ``get_hermes_home`` honours the context-local override first.
+    """
+    try:
+        from hermes_constants import get_hermes_home
+        return Path(get_hermes_home())
+    except Exception:  # noqa: BLE001 - hosts without core still get a sane path
+        base = os.environ.get("HERMES_HOME")
+        return Path(base) if base else Path.home() / ".hermes"
 
 
 def _cron_api(action: str, **kwargs: Any) -> Dict[str, Any]:

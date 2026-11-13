@@ -511,6 +511,29 @@ class DemoTests(unittest.TestCase):
         self.assertEqual(created["deliver"], "local")
         self.assertTrue(created["no_agent"])
 
+    def test_the_demo_uses_the_active_profile_not_the_launch_one(self):
+        """A multi-profile process must not drop the demo into the profile it launched with.
+
+        ``HERMES_HOME`` is pinned at launch; the active profile's home comes from
+        ``hermes_constants.get_hermes_home`` (context-local override first).
+        """
+        from hermes_watchdog import demo
+        import hermes_constants
+
+        with tempfile.TemporaryDirectory() as launch, tempfile.TemporaryDirectory() as active:
+            with patch.dict(os.environ, {"HERMES_HOME": launch}), \
+                    patch.object(hermes_constants, "get_hermes_home", return_value=Path(active)):
+                self.assertEqual(demo._home(), Path(active))
+
+    def test_the_demo_falls_back_when_core_has_no_get_hermes_home(self):
+        """A host without core's helper still gets a sane path, never a crash."""
+        from hermes_watchdog import demo
+
+        with tempfile.TemporaryDirectory() as launch:
+            with patch.dict(os.environ, {"HERMES_HOME": launch}), \
+                    patch.dict(sys.modules, {"hermes_constants": None}):
+                self.assertEqual(demo._home(), Path(launch))
+
     def test_a_failed_demo_says_so_and_is_not_tagged(self):
         report, calls, _, lg = self._run(outcome="failed", detail="steps ran but the failure is still open")
         self.assertFalse(report["ok"])

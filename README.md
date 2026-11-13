@@ -123,6 +123,11 @@ Verbs: `rerun_job`, `pause_job`, `check` (argv list, no shell), `escalate`.
   refuses to save one; only a playbook file the user writes (or a built-in) can
   carry it, and it runs with a minimal environment (`PATH`, `HOME`, `LANG` plus
   whatever that step names).
+- **Private-flag note.** To make a repair's rerun finish before it is verified, the
+  plugin sets core's private `gateway.session_context._SESSION_ASYNC_DELIVERY` flag
+  (the same trick `hermes cron run` uses). That name is not part of the published
+  plugin API and can change without notice; the import is wrapped, so a rename
+  degrades to an ordinary asynchronous run instead of an error.
 
 ## Desktop pane
 
@@ -143,7 +148,10 @@ A healthy machine has an empty repair list, so the pane proves nothing on a fres
 install. **Show me a fix** closes that: Watchdog creates a scheduled job, runs it
 once and lets it fail, runs the same repair cycle the tools run, and deletes the
 job — one real incident, one verified repair, about two seconds, tagged `demo` so
-it never affects the fleet counts.
+it never affects the fleet counts. It does write to the machine: a no-agent cron
+job and an executable script (mode 0755) under `$HERMES_HOME/scripts`. Both are
+removed at the end; if Hermes stops mid-demo they stay behind (the job is named
+`Nightly pricing sync (demo)`, the script `watchdog-demo-*.sh`), so delete those.
 
 The Agent + Desktop halves toggle together, and the status-bar chip renders the live
 incident count from the same `/status` route the pane reads.
@@ -206,7 +214,7 @@ and renders a Desktop pane over the same report the tools return.
 ## Development
 
 ```bash
-python -m unittest discover -s tests -v      # 37 tests, stdlib + FastAPI
+python -m unittest discover -s tests -v      # 50 tests, stdlib + FastAPI
 hermes plugins validate /path/to/hermes-watchdog --install-deps
 hermes plugins doctor /path/to/hermes-watchdog
 ```
