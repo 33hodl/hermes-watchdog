@@ -3,6 +3,14 @@
 Everything here was found by running the plugin on a real Desktop client, not by
 reading the code. Each fix is one behaviour that made a click look like a no-op.
 
+## Unreleased
+
+- **A repaired row now shows its proof.** The pane said "Fixed" and stopped there, so the
+  one thing this plugin is about — *what Hermes's own record says happened* — was invisible
+  in the UI. The ledger detail is now a sentence with the authority and the time
+  (`core marked it resolved at 05:43 — Hermes's own run record`, or
+  `the next run succeeded at 09:41 — ...`), and the pane renders it under the outcome.
+
 ## 0.5.3
 
 - **The install line, the docs and the catalog pin now name the same commit.** A reviewer

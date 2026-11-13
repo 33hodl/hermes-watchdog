@@ -234,7 +234,16 @@ function RepairRow({ repair, compact }) {
             className: 'mt-0.5 truncate text-[0.6875rem] text-(--ui-text-tertiary)',
             children: (PLAIN_OUTCOME[repair.outcome] || repair.outcome)
               + (repair.attempts > 1 ? ' · ' + repair.attempts + ' attempts' : '')
-          })
+          }),
+          // The proof, not a promise: what Hermes's own record says happened.
+          // This is the whole product, so it gets its own line instead of a tooltip.
+          repair.detail
+            ? jsx('div', {
+                className: 'mt-0.5 truncate text-[0.6875rem] text-(--ui-text-quaternary)',
+                title: repair.detail,
+                children: repair.detail
+              })
+            : null
         ]
       })
     ]

@@ -135,11 +135,12 @@ the pane, the tools and the hook can never disagree.
 The page lives at `/watchdog`, with a row under Artifacts in the sidebar and the
 status chip as the other door. Live numbers above come from a real profile.
 
-![Hermes Watchdog in Settings → Plugins](docs/ui-settings.png)
+Every repaired row carries its own proof line under the outcome — `core marked it
+resolved at 03:12 — Hermes's own run record` — so the pane shows the evidence, not
+just the verdict.
 
-Installed and enabled on a real Desktop client: the Agent + Desktop halves toggle
-together, and the status-bar chip renders live incident counts from the same
-`/status` route the pane reads.
+The Agent + Desktop halves toggle together, and the status-bar chip renders the live
+incident count from the same `/status` route the pane reads.
 
 ## Proof
 
@@ -160,14 +161,14 @@ profile, and no network is used.
 ```
 $ python scripts/proof.py
 run 1  last_status: error
-incidents before: [('…909afa', 'timeout', 'detected'), ('…757d79', 'script', 'detected')]
+incidents before: [('…5cefd6', 'timeout', 'detected'), ('…1a1a28', 'script', 'detected')]
 cycle  health: degraded attempts: 2
-  builtin-rerun-timeout -> repaired (verified by Hermes's own incident/execution record)
+  builtin-rerun-timeout -> repaired (core marked it resolved at 05:43 — Hermes's own run record)
     rerun_job ok=True rerun requested
   builtin-escalate-script -> escalated (playbook escalated to the operator)
     pause_job ok=True paused
     escalate ok=True escalated to operator
-incidents after: [('…909afa', 'resolved'), ('…757d79', 'alerted')]
+incidents after: [('…5cefd6', 'resolved'), ('…1a1a28', 'alerted')]
 
 PROOF PASSED
 ```

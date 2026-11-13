@@ -109,6 +109,32 @@ class CycleTests(unittest.TestCase):
         self.assertEqual(calls, [("run", "job-1")])
         self.assertEqual(self.fake_ledger.rows[0][0], "repaired")
 
+    def test_repaired_detail_carries_the_proof_sentence(self):
+        """The pane line is the product: a verdict plus what Hermes recorded."""
+        with patch.object(repair, "sources") as s, patch.object(repair, "ledger", self.fake_ledger), \
+                patch.object(repair, "_cron_api", lambda a, j: {"success": True}), \
+                patch.object(repair, "_verified", lambda *a: True), \
+                patch.object(repair, "_evidence", lambda *a: "the next run succeeded at 09:41"):
+            s.snapshot.return_value = _jobs()
+            report = repair.cycle(data_dir=None)
+        detail = report["repaired"][0]["detail"]
+        self.assertEqual(detail, "the next run succeeded at 09:41 — Hermes's own run record")
+        self.assertEqual(self.fake_ledger.rows[0][1], detail)
+
+    def test_evidence_names_the_record_and_the_time(self):
+        with patch.object(repair, "sources") as s:
+            s._incidents.return_value = [{
+                "id": "inc-1", "state": "resolved", "resolved_at": "2026-11-05T01:12:00Z",
+            }]
+            sentence = repair._evidence("job-1", "inc-1", 0.0)
+        self.assertRegex(sentence, r"^core marked it resolved at \d\d:\d\d$")
+
+    def test_evidence_is_empty_when_nothing_confirms(self):
+        with patch.object(repair, "sources") as s:
+            s._incidents.return_value = [{"id": "inc-1", "state": "detected"}]
+            s._latest_execution.return_value = {"status": "error"}
+            self.assertEqual(repair._evidence("job-1", "inc-1", 0.0), "")
+
     def test_unverified_repair_is_a_failure_not_a_success(self):
         report, _ = self._run(False)
         self.assertEqual(report["repaired"], [])

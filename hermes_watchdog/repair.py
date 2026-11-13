@@ -107,6 +107,42 @@ def _verified(job_id: str, incident_id: str, started_at: float) -> bool:
     return False
 
 
+def _evidence(job_id: str, incident_id: str, started_at: float) -> str:
+    """The proof, in words a person can read: what Hermes's record says happened.
+
+    `_verified` answers yes/no; the pane and the ledger need the sentence. Same two
+    authorities, same order, so the sentence can never disagree with the verdict.
+    """
+    try:
+        for inc in sources._incidents():  # noqa: SLF001 - read-only view
+            if (inc.get("id") or inc.get("incident_id")) != incident_id:
+                continue
+            if str(inc.get("state")) in {"resolved", "closed"}:
+                stamp = _ts(inc.get("resolved_at") or inc.get("last_seen_at")) or time.time()
+                return f"core marked it resolved at {_clock(stamp)}"
+            break
+    except Exception as exc:  # noqa: BLE001
+        log.debug("watchdog: evidence via incidents failed: %s", exc)
+    try:
+        latest = sources._latest_execution(job_id)  # noqa: SLF001
+        if latest and str(latest.get("status")) in {"success", "completed", "ok"}:
+            finished = latest.get("finished_at") or latest.get("started_at") or ""
+            stamp = _ts(finished)
+            if stamp >= started_at - 1:
+                return f"the next run succeeded at {_clock(stamp)}"
+    except Exception as exc:  # noqa: BLE001
+        log.debug("watchdog: evidence via executions failed: %s", exc)
+    return ""
+
+
+def _clock(ts: float) -> str:
+    """Local wall-clock HH:MM — the time the person watching would have seen."""
+    try:
+        return time.strftime("%H:%M", time.localtime(float(ts)))
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def _ts(value: Any) -> float:
     """Best-effort ISO-8601 -> epoch; 0.0 when unparseable."""
     if not value:
@@ -273,8 +309,13 @@ def cycle(
                       else "handed to the operator (core did not accept the state change)")
         elif step_records and all(r["ok"] for r in step_records):
             ok = _verified(job, inc["incident_id"], started)
-            outcome, detail = ("repaired", "verified by Hermes's own incident/execution record") if ok \
-                else ("failed", "steps ran but the failure is still open")
+            if ok:
+                proof = _evidence(job, inc["incident_id"], started)
+                outcome = "repaired"
+                detail = (proof + " — Hermes's own run record") if proof else \
+                    "verified by Hermes's own incident/execution record"
+            else:
+                outcome, detail = "failed", "steps ran but the failure is still open"
         else:
             outcome, detail = "failed", "a step failed"
         ledger.finish_attempt(repair_id, outcome, detail)
