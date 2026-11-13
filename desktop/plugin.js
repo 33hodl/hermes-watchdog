@@ -22,6 +22,7 @@ import {
   useQuery,
   useQueryClient
 } from '@hermes/plugin-sdk'
+import { useState } from 'react'
 import { jsx, jsxs } from 'react/jsx-runtime'
 
 const ROUTES_AREA = 'routes'
@@ -224,6 +225,14 @@ function RepairRow({ repair, compact }) {
                 title: repair.job_id,
                 children: jobLabel(repair.job_name, repair.job_id)
               }),
+              repair.demo
+                ? jsx(Badge, {
+                    className: 'shrink-0 text-[0.625rem] uppercase',
+                    title: 'A demo: Watchdog created this job, broke it and deleted it',
+                    variant: 'secondary',
+                    children: 'demo'
+                  })
+                : null,
               jsx('span', {
                 className: 'shrink-0 text-[0.6875rem] text-(--ui-text-quaternary)',
                 children: relative(repair.started_at)
@@ -326,6 +335,32 @@ function WatchdogBody({ ctx, compact }) {
     client.invalidateQueries({ queryKey: KEY })
   }
 
+  // A fresh install has an empty repair list, so the pane proves nothing. This runs
+  // the real loop on a real throwaway job and reports what Hermes recorded.
+  const [demoBusy, setDemoBusy] = useState(false)
+  const runDemo = async () => {
+    if (!ctx || !ctx.rest || demoBusy) {
+      return
+    }
+    setDemoBusy(true)
+    const result = await ctx.rest('/demo', { method: 'POST' }).catch(thrown => ({ error: String(thrown) }))
+    setDemoBusy(false)
+    if (result && result.error) {
+      host.notify({ kind: 'error', message: 'The demo could not run: ' + result.error })
+    } else if (result && result.ok) {
+      host.notify({
+        kind: 'success',
+        message: 'Watchdog fixed a job it broke on purpose: ' + (result.detail || 'verified by Hermes')
+      })
+    } else {
+      host.notify({
+        kind: 'warning',
+        message: 'The demo repair did not verify: ' + ((result && result.detail) || 'no reason returned')
+      })
+    }
+    client.invalidateQueries({ queryKey: KEY })
+  }
+
   const ack = async incidentId => {
     if (!ctx || !ctx.rest) {
       return
@@ -406,9 +441,19 @@ function WatchdogBody({ ctx, compact }) {
         className: 'flex items-center gap-1.5 px-3 py-2',
         children: [
           jsx(Button, { onClick: () => run(null, false), size: 'xs', variant: 'default', children: 'Check everything now' }),
+          jsx(Button, {
+            disabled: demoBusy,
+            onClick: runDemo,
+            size: 'xs',
+            variant: 'secondary',
+            title: 'Creates a job, breaks it, fixes it and deletes it — all on this machine',
+            children: demoBusy ? 'Running the demo…' : 'Show me a fix'
+          }),
           jsx('span', {
             className: 'self-center text-[0.6875rem] text-(--ui-text-quaternary)',
-            children: 'Runs a check and fixes whatever it can.'
+            children: repairs.length === 0
+              ? 'Or watch one on a job Watchdog breaks on purpose.'
+              : 'Runs a check and fixes whatever it can.'
           })
         ]
       }),

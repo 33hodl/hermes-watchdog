@@ -139,6 +139,12 @@ Every repaired row carries its own proof line under the outcome — `core marked
 resolved at 03:12 — Hermes's own run record` — so the pane shows the evidence, not
 just the verdict.
 
+A healthy machine has an empty repair list, so the pane proves nothing on a fresh
+install. **Show me a fix** closes that: Watchdog creates a scheduled job, runs it
+once and lets it fail, runs the same repair cycle the tools run, and deletes the
+job — one real incident, one verified repair, about two seconds, tagged `demo` so
+it never affects the fleet counts.
+
 The Agent + Desktop halves toggle together, and the status-bar chip renders the live
 incident count from the same `/status` route the pane reads.
 
@@ -161,14 +167,14 @@ profile, and no network is used.
 ```
 $ python scripts/proof.py
 run 1  last_status: error
-incidents before: [('…5cefd6', 'timeout', 'detected'), ('…1a1a28', 'script', 'detected')]
+incidents before: [('…f601', 'timeout', 'detected'), ('…8643', 'script', 'detected')]
 cycle  health: degraded attempts: 2
-  builtin-rerun-timeout -> repaired (core marked it resolved at 05:43 — Hermes's own run record)
-    rerun_job ok=True rerun requested
-  builtin-escalate-script -> escalated (playbook escalated to the operator)
+  builtin-rerun-timeout -> repaired (core marked it resolved at 06:00 — Hermes's own run record)
+    rerun_job ok=True reran the job: succeeded
+  builtin-escalate-script -> escalated (handed to the operator (core incident marked alerted))
     pause_job ok=True paused
     escalate ok=True escalated to operator
-incidents after: [('…5cefd6', 'resolved'), ('…1a1a28', 'alerted')]
+incidents after: [('…f601', 'resolved'), ('…8643', 'alerted')]
 
 PROOF PASSED
 ```

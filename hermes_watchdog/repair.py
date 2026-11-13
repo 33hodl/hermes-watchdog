@@ -24,20 +24,40 @@ MAX_JOBS_PER_CYCLE = 5          # hard cap on incidents touched in one cycle
 MAX_CYCLE_SECONDS = 120.0       # whole-cycle wall clock budget
 
 
-def _cron_api(action: str, job_id: str) -> Dict[str, Any]:
-    """Hermes's own cron tool — same path the CLI's ``hermes cron run`` uses."""
+def _cron_api(action: str, job_id: str, synchronous: bool = False) -> Dict[str, Any]:
+    """Hermes's own cron tool — same path the CLI's ``hermes cron run`` uses.
+
+    ``synchronous`` forces the run to finish inside this call instead of being
+    dispatched to a daemon thread. Verification is only worth anything if the job
+    actually ran, so a repair rerun asks for the synchronous path (the same
+    stateless-channel trick ``hermes cron run`` uses, see #86721).
+    """
     from tools.cronjob_tools import cronjob
+    token = None
     try:
+        if synchronous:
+            from gateway.session_context import _SESSION_ASYNC_DELIVERY
+            token = _SESSION_ASYNC_DELIVERY.set(False)
         return json.loads(cronjob(action=action, job_id=job_id))
     except Exception as exc:  # noqa: BLE001
         return {"success": False, "error": f"{type(exc).__name__}: {exc}"}
+    finally:
+        if token is not None:
+            try:
+                _SESSION_ASYNC_DELIVERY.reset(token)
+            except Exception:  # noqa: BLE001 - never let a reset break a repair
+                pass
 
 
 def _run_step(step: Dict[str, Any], job_id: str) -> Dict[str, Any]:
     """Execute one playbook step. Never raises; returns a step record."""
     verb = step.get("verb")
     if verb == "rerun_job":
-        result = _cron_api("run", job_id)
+        result = _cron_api("run", job_id, synchronous=True)
+        job = result.get("job") or {}
+        if job.get("executed"):
+            verdict = "succeeded" if job.get("execution_success") else "failed"
+            return {"verb": verb, "ok": True, "detail": f"reran the job: {verdict}"}
         return {
             "verb": verb,
             "ok": bool(result.get("success", True)),
@@ -92,7 +112,11 @@ def _verified(job_id: str, incident_id: str, started_at: float) -> bool:
             if (inc.get("id") or inc.get("incident_id")) != incident_id:
                 continue
             if str(inc.get("state")) in {"resolved", "closed"}:
-                return True
+                # A resolution that predates this attempt proves nothing: the job may
+                # have recovered on its own before the watchdog touched it.
+                stamp = _ts(inc.get("resolved_at") or inc.get("last_seen_at"))
+                if stamp >= started_at - 1:
+                    return True
             break
     except Exception as exc:  # noqa: BLE001
         log.debug("watchdog: verify via incidents failed: %s", exc)
@@ -119,7 +143,8 @@ def _evidence(job_id: str, incident_id: str, started_at: float) -> str:
                 continue
             if str(inc.get("state")) in {"resolved", "closed"}:
                 stamp = _ts(inc.get("resolved_at") or inc.get("last_seen_at")) or time.time()
-                return f"core marked it resolved at {_clock(stamp)}"
+                if stamp >= started_at - 1:
+                    return f"core marked it resolved at {_clock(stamp)}"
             break
     except Exception as exc:  # noqa: BLE001
         log.debug("watchdog: evidence via incidents failed: %s", exc)

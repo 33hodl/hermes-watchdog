@@ -29,11 +29,16 @@ CREATE TABLE IF NOT EXISTS repairs (
     started_at  REAL NOT NULL,
     finished_at REAL,
     outcome     TEXT NOT NULL DEFAULT 'running',
-    detail      TEXT NOT NULL DEFAULT ''
+    detail      TEXT NOT NULL DEFAULT '',
+    demo        INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS repairs_incident ON repairs(incident_id, started_at);
 CREATE INDEX IF NOT EXISTS repairs_started ON repairs(started_at);
 """
+
+# Columns added after the first release. SQLite has no "ADD COLUMN IF NOT EXISTS", so
+# an older ledger gets them by hand — the pane must never crash on a stale DB.
+_MIGRATIONS = (("demo", "INTEGER NOT NULL DEFAULT 0"),)
 
 
 def _fallback_db_path() -> Path:
@@ -71,7 +76,23 @@ def _conn() -> sqlite3.Connection:
         path.parent.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(path)
     conn.executescript(_SCHEMA)
+    _migrate(conn)
     return conn
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    try:
+        have = {row[1] for row in conn.execute("PRAGMA table_info(repairs)").fetchall()}
+    except Exception as exc:  # noqa: BLE001 - a locked/odd DB must not break the pane
+        log.debug("watchdog: ledger migration skipped: %s", exc)
+        return
+    for column, ddl in _MIGRATIONS:
+        if column not in have:
+            try:
+                conn.execute(f"ALTER TABLE repairs ADD COLUMN {column} {ddl}")
+                conn.commit()
+            except Exception as exc:  # noqa: BLE001
+                log.debug("watchdog: could not add %s: %s", column, exc)
 
 
 def start_attempt(
@@ -125,10 +146,24 @@ def recent(limit: int = 20) -> List[Dict[str, Any]]:
     conn = _conn()
     rows = conn.execute(
         "SELECT incident_id, job_id, job_name, playbook, source, started_at, finished_at, "
-        "outcome, detail FROM repairs ORDER BY started_at DESC LIMIT ?",
+        "outcome, detail, demo FROM repairs ORDER BY started_at DESC LIMIT ?",
         (max(1, min(int(limit), 200)),),
     ).fetchall()
     return [_row_view(r) for r in rows]
+
+
+def mark_demo(incident_id: str) -> int:
+    """Tag the newest attempt for an incident as a demo, so it never counts as fleet health."""
+    conn = _conn()
+    row = conn.execute(
+        "SELECT id FROM repairs WHERE incident_id = ? ORDER BY started_at DESC LIMIT 1",
+        (incident_id,),
+    ).fetchone()
+    if not row:
+        return 0
+    conn.execute("UPDATE repairs SET demo = 1 WHERE id = ?", (int(row[0]),))
+    conn.commit()
+    return int(row[0])
 
 
 def _row_view(row) -> Dict[str, Any]:
@@ -142,17 +177,23 @@ def _row_view(row) -> Dict[str, Any]:
         "finished_at": row[6],
         "outcome": row[7],
         "detail": row[8],
+        "demo": bool(row[9]) if len(row) > 9 else False,
     }
 
 
 def summary() -> Dict[str, Any]:
-    """Counts for the pane header: repaired / failed in the last 7 days."""
+    """Counts for the pane header: repaired / failed in the last 7 days.
+
+    Demo rows are excluded on purpose: the demo runs a real repair, but counting it
+    would make the fleet look healthier than it is.
+    """
     conn = _conn()
     since = time.time() - 7 * 86400
     out: Dict[str, Any] = {"repaired_7d": 0, "failed_7d": 0, "escalated_7d": 0}
     for outcome, key in (("repaired", "repaired_7d"), ("failed", "failed_7d"), ("escalated", "escalated_7d")):
         row = conn.execute(
-            "SELECT COUNT(*) FROM repairs WHERE outcome = ? AND started_at >= ?", (outcome, since),
+            "SELECT COUNT(*) FROM repairs WHERE outcome = ? AND started_at >= ? AND demo = 0",
+            (outcome, since),
         ).fetchone()
         out[key] = int(row[0]) if row else 0
     row = conn.execute("SELECT MAX(started_at) FROM repairs").fetchone()

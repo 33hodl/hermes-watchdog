@@ -20,7 +20,7 @@ _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:  # the engine package lives at the plugin root
     sys.path.insert(0, str(_ROOT))
 
-from hermes_watchdog import ledger, playbooks, repair, sources  # noqa: E402
+from hermes_watchdog import demo, ledger, playbooks, repair, sources  # noqa: E402
 
 router = APIRouter()
 
@@ -62,6 +62,17 @@ async def run_repair(body: RepairRequest) -> Dict[str, Any]:
 async def ack(body: AckRequest) -> Dict[str, Any]:
     closed, reason = sources.ack(body.incident_id)
     return {"closed": closed, "incident_id": body.incident_id, "reason": reason}
+
+
+@router.post("/demo")
+async def run_demo() -> Dict[str, Any]:
+    """One real failure, one real repair, on a throwaway job that is deleted afterwards.
+
+    This exists because the product's claim is invisible on a healthy machine: a
+    fresh install has an empty repair list, so the pane proves nothing to a judge or
+    a new user. The demo runs the same cycle the tools run — no simulated rows.
+    """
+    return demo.run(data_dir=_data_dir())
 
 
 @router.get("/runbooks")

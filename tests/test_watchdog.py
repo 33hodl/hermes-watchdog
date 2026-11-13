@@ -93,7 +93,7 @@ class CycleTests(unittest.TestCase):
     def _run(self, verified, api=None, **kw):
         calls = []
 
-        def _api(action, job_id):
+        def _api(action, job_id, **kw):
             calls.append((action, job_id))
             return api(action, job_id) if api else {"success": True}
 
@@ -112,7 +112,7 @@ class CycleTests(unittest.TestCase):
     def test_repaired_detail_carries_the_proof_sentence(self):
         """The pane line is the product: a verdict plus what Hermes recorded."""
         with patch.object(repair, "sources") as s, patch.object(repair, "ledger", self.fake_ledger), \
-                patch.object(repair, "_cron_api", lambda a, j: {"success": True}), \
+                patch.object(repair, "_cron_api", lambda a, j, **kw: {"success": True}), \
                 patch.object(repair, "_verified", lambda *a: True), \
                 patch.object(repair, "_evidence", lambda *a: "the next run succeeded at 09:41"):
             s.snapshot.return_value = _jobs()
@@ -135,6 +135,32 @@ class CycleTests(unittest.TestCase):
             s._latest_execution.return_value = {"status": "error"}
             self.assertEqual(repair._evidence("job-1", "inc-1", 0.0), "")
 
+    def test_a_rerun_actually_runs_before_it_is_verified(self):
+        """Queueing a rerun and then verifying proves nothing; the run must finish."""
+        seen = []
+
+        def _api(action, job_id, **kw):
+            seen.append((action, kw))
+            return {"success": True, "job": {"executed": True, "execution_success": True}}
+
+        with patch.object(repair, "sources") as s, patch.object(repair, "ledger", self.fake_ledger), \
+                patch.object(repair, "_cron_api", _api), \
+                patch.object(repair, "_verified", lambda *a: True):
+            s.snapshot.return_value = _jobs()
+            report = repair.cycle(data_dir=None)
+        self.assertTrue(seen[0][1].get("synchronous"), "the rerun must run inside the cycle")
+        self.assertEqual(report["attempts"][0]["steps"][0]["detail"], "reran the job: succeeded")
+
+    def test_a_resolution_older_than_the_attempt_is_not_a_repair(self):
+        """The job may have recovered on its own; an old resolution proves nothing."""
+        with patch.object(repair, "sources") as s:
+            s._incidents.return_value = [{
+                "id": "inc-1", "state": "resolved", "resolved_at": "2026-11-05T00:01:00Z",
+            }]
+            s._latest_execution.return_value = None
+            self.assertFalse(repair._verified("job-1", "inc-1", time.time()))
+            self.assertEqual(repair._evidence("job-1", "inc-1", time.time()), "")
+
     def test_unverified_repair_is_a_failure_not_a_success(self):
         report, _ = self._run(False)
         self.assertEqual(report["repaired"], [])
@@ -155,20 +181,20 @@ class CycleTests(unittest.TestCase):
         self.assertEqual(calls_dry, [("run", "job-1")])
 
         with patch.object(repair, "sources") as s, patch.object(repair, "ledger", _FakeLedger()), \
-                patch.object(repair, "_cron_api", lambda a, j: (_ for _ in ()).throw(AssertionError("ran"))):
+                patch.object(repair, "_cron_api", lambda a, j, **kw: (_ for _ in ()).throw(AssertionError("ran"))):
             s.snapshot.return_value = _jobs()
             plan = repair.cycle(data_dir=None, dry_run=True)
         self.assertEqual([a["outcome"] for a in plan["attempts"]], ["planned"])
         self.assertEqual(plan["repaired"], [])
 
     def test_failed_step_stops_the_playbook(self):
-        report, calls = self._run(True, api=lambda a, j: {"success": False, "error": "paused job gone"})
+        report, calls = self._run(True, api=lambda a, j, **kw: {"success": False, "error": "paused job gone"})
         self.assertEqual(len(report["failed"]), 1)
         self.assertEqual(self.fake_ledger.rows[0][0], "failed")
 
     def test_escalate_step_marks_escalated(self):
         with patch.object(repair, "sources") as s, patch.object(repair, "ledger", _FakeLedger()), \
-                patch.object(repair, "_cron_api", lambda a, j: {"success": True}), \
+                patch.object(repair, "_cron_api", lambda a, j, **kw: {"success": True}), \
                 patch.object(repair, "playbooks") as pb:
             s.snapshot.return_value = _jobs()
             pb.all_playbooks.return_value = [{
@@ -338,7 +364,7 @@ class OrphanedIncidentTests(unittest.TestCase):
     def test_unknown_job_state_does_not_close_anything(self):
         with patch.object(repair, "sources") as s, patch.object(repair, "ledger", _FakeLedger()), \
                 patch.object(repair, "playbooks") as pb, \
-                patch.object(repair, "_cron_api", lambda a, j: {"success": True}):
+                patch.object(repair, "_cron_api", lambda a, j, **kw: {"success": True}):
             s.snapshot.return_value = _jobs()
             s.job_exists.return_value = None
             pb.all_playbooks.return_value = [{
@@ -435,6 +461,80 @@ class SnapshotTests(unittest.TestCase):
             snap = sources.snapshot()
         self.assertEqual(snap["counts"]["failing_jobs"], 1)
         self.assertEqual(snap["health"], "degraded")
+
+
+class DemoTests(unittest.TestCase):
+    """The demo is the only place a repair happens on purpose — it must be real and tidy."""
+
+    def _run(self, outcome="repaired", detail="the next run succeeded at 09:41"):
+        from hermes_watchdog import demo
+
+        calls = []
+
+        def _api(action, **kw):
+            calls.append((action, kw))
+            if action == "create":
+                return {"success": True, "job": {"job_id": "job-demo"}}
+            return {"success": True}
+
+        cycle_report = {
+            "attempts": [{"outcome": outcome, "detail": detail,
+                          "steps": [{"verb": "rerun_job", "ok": True, "detail": "reran the job: succeeded"}]}],
+            "repaired": [{"outcome": outcome}] if outcome == "repaired" else [],
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.dict(os.environ, {"HERMES_HOME": tmp}), \
+                    patch.object(demo, "_cron_api", _api), \
+                    patch.object(demo, "_run_sync", lambda job_id: {"success": True}), \
+                    patch.object(demo, "_open_incident_for", lambda job_id: "inc-demo"), \
+                    patch.object(demo, "repair") as rp, patch.object(demo, "ledger") as lg:
+                rp.cycle.return_value = cycle_report
+                report = demo.run(data_dir=None)
+            scripts = sorted(f.name for f in (Path(tmp) / "scripts").glob("*")) if (Path(tmp) / "scripts").exists() else []
+        return report, calls, scripts, lg
+
+    def test_the_demo_repairs_a_real_job_and_removes_it(self):
+        report, calls, scripts, lg = self._run()
+        self.assertTrue(report["ok"])
+        self.assertEqual(report["outcome"], "repaired")
+        self.assertEqual(report["detail"], "the next run succeeded at 09:41")
+        # Created, repaired, then deleted — no demo job is left behind.
+        self.assertEqual([c[0] for c in calls], ["create", "remove"])
+        self.assertEqual(scripts, [])
+        self.assertTrue(report["cleaned_up"])
+        lg.mark_demo.assert_called_once_with("inc-demo")
+
+    def test_the_demo_creates_the_job_silently(self):
+        """A demo must not page the owner: local delivery, no agent turn."""
+        _, calls, _, _ = self._run()
+        created = calls[0][1]
+        self.assertEqual(created["deliver"], "local")
+        self.assertTrue(created["no_agent"])
+
+    def test_a_failed_demo_says_so_and_is_not_tagged(self):
+        report, calls, _, lg = self._run(outcome="failed", detail="steps ran but the failure is still open")
+        self.assertFalse(report["ok"])
+        self.assertEqual(report["outcome"], "failed")
+        lg.mark_demo.assert_not_called()
+        self.assertEqual(calls[-1][0], "remove")
+
+
+class DemoCountsTests(unittest.TestCase):
+    def test_demo_rows_do_not_flatter_the_fleet(self):
+        from hermes_watchdog import ledger
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.dict(os.environ, {"HERMES_HOME": tmp}), \
+                    patch.dict(sys.modules, {"plugins.plugin_storage": None}):
+                real = ledger.start_attempt("inc-1", "job-1", "digest", "builtin-rerun-timeout", "builtin")
+                ledger.finish_attempt(real, "repaired", "core marked it resolved at 09:41")
+                mock = ledger.start_attempt("inc-2", "job-demo", "demo job", "builtin-rerun-timeout", "builtin")
+                ledger.finish_attempt(mock, "repaired", "core marked it resolved at 09:42")
+                ledger.mark_demo("inc-2")
+                summary = ledger.summary()
+                recent = ledger.recent(limit=5)
+        self.assertEqual(summary["repaired_7d"], 1)
+        self.assertEqual([r["demo"] for r in recent], [True, False])
 
 
 if __name__ == "__main__":

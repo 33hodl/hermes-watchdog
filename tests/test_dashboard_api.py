@@ -13,6 +13,7 @@ import os
 import tempfile
 import sys
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -63,6 +64,19 @@ class DashboardApiTests(unittest.TestCase):
         body = response.json()
         self.assertTrue(body["dry_run"])
         self.assertEqual(body["repaired"], [])
+
+    def test_demo_route_is_wired_to_the_demo_engine(self):
+        """The route must reach demo.run and pass its report through unchanged.
+
+        `demo.run` is patched on purpose: an unpatched call would create a real cron
+        job on whatever host runs the tests, which is not a test's business.
+        """
+        from hermes_watchdog import demo as demo_mod
+
+        with patch.object(demo_mod, "run", lambda data_dir=None: {"ok": True, "detail": "the next run succeeded at 09:41"}):
+            response = self.client.post("/api/plugins/hermes-watchdog/demo")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["detail"], "the next run succeeded at 09:41")
 
     def test_runbooks_lists_the_builtins(self):
         response = self.client.get("/api/plugins/hermes-watchdog/runbooks")

@@ -3,7 +3,20 @@
 Everything here was found by running the plugin on a real Desktop client, not by
 reading the code. Each fix is one behaviour that made a click look like a no-op.
 
-## Unreleased
+## 0.5.4
+
+- **A rerun now actually runs before it is verified.** `builtin-rerun-timeout` queued the
+  job for the next scheduler tick and then verified immediately, so the usual honest
+  answer was "steps ran but the failure is still open" — the pane reported a failed fix
+  for a repair that would have worked. The step now runs the job synchronously (the same
+  stateless-channel path `hermes cron run` uses) and reports the verdict it saw.
+- **An old resolution is no longer counted as this attempt's repair.** Verification
+  accepted any `resolved` incident, including one that recovered before the watchdog
+  touched it. It now requires the resolution to be at or after the attempt start.
+- **"Show me a fix" — a real demo on a throwaway job.** A fresh install has an empty
+  repair list, so the pane proved nothing. The button creates a job, breaks it, repairs
+  it with the same cycle the tools use, deletes the job, and tags the ledger row `demo`
+  so it is excluded from the health counts.
 
 - **A repaired row now shows its proof.** The pane said "Fixed" and stopped there, so the
   one thing this plugin is about — *what Hermes's own record says happened* — was invisible
