@@ -517,12 +517,16 @@ class DemoTests(unittest.TestCase):
         ``HERMES_HOME`` is pinned at launch; the active profile's home comes from
         ``hermes_constants.get_hermes_home`` (context-local override first).
         """
+        from types import ModuleType
+
         from hermes_watchdog import demo
-        import hermes_constants
 
         with tempfile.TemporaryDirectory() as launch, tempfile.TemporaryDirectory() as active:
+            # A stub stands in for core, so this test runs in a bare checkout too.
+            core = ModuleType("hermes_constants")
+            core.get_hermes_home = lambda: Path(active)
             with patch.dict(os.environ, {"HERMES_HOME": launch}), \
-                    patch.object(hermes_constants, "get_hermes_home", return_value=Path(active)):
+                    patch.dict(sys.modules, {"hermes_constants": core}):
                 self.assertEqual(demo._home(), Path(active))
 
     def test_the_demo_falls_back_when_core_has_no_get_hermes_home(self):
