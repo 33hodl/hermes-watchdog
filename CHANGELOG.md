@@ -3,6 +3,13 @@
 Everything here was found by running the plugin on a real Desktop client, not by
 reading the code. Each fix is one behaviour that made a click look like a no-op.
 
+## 0.5.3
+
+- **The install line, the docs and the catalog pin now name the same commit.** A reviewer
+  reading the entry, the README's install command and the release saw three different
+  SHAs; the docs commit that corrected the UI table left the pin behind. This release is
+  that head, so "what you read" and "what you install" are one commit.
+
 ## 0.5.2
 
 - **The dashboard stops 500-ing on a checkout without core.** The ledger imported the
