@@ -24,6 +24,7 @@ import {
 import { useEffect, useState } from 'react'
 import { jsx, jsxs } from 'react/jsx-runtime'
 
+const BUILD = '0.9.3'
 const ROUTES_AREA = 'routes'
 const SIDEBAR_NAV_AREA = 'sidebar.nav'
 const PAGE_PATH = '/watchdog'
@@ -651,11 +652,11 @@ function WatchdogBody({ ctx, compact }) {
               }),
               jsx(Button, {
                 disabled: isFetching,
-                onClick: () => refetch(),
+                onClick: () => run(null, false),
                 size: 'icon-xs',
                 variant: 'ghost',
-                title: 'Check again',
-                children: jsx(Codicon, { name: 'refresh' })
+                title: 'Check every job now — this runs the repair cycle, it does not just reload the page',
+                children: jsx(Codicon, { name: isFetching ? 'sync~spin' : 'refresh' })
               })
             ]
           }),
@@ -751,7 +752,11 @@ function WatchdogBody({ ctx, compact }) {
                   className: 'mt-2 text-[0.6875rem] text-(--ui-text-quaternary)',
                   children: 'Hermes could not be read: ' + ((data.upstream.errors || []).join('; '))
                 })
-              : null
+              : null,
+            jsx('div', {
+              className: 'mt-3 text-right text-[0.625rem] text-(--ui-text-quaternary)',
+              children: 'watchdog ' + BUILD
+            })
           ]
         })
       })
