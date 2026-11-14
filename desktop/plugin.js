@@ -146,6 +146,61 @@ function Chip({ ctx }) {
   })
 }
 
+function IncidentDetail({ incident }) {
+  const detail = incident.detail || {}
+  const tried = detail.tried || []
+  const steps = detail.steps || []
+  if (!detail.what) {
+    return null
+  }
+  return jsxs('details', {
+    className: 'mt-1 text-[0.6875rem] leading-4 text-(--ui-text-tertiary)',
+    open: incident.state === 'alerted',
+    children: [
+      jsx('summary', {
+        className: 'cursor-pointer select-none text-(--ui-text-quaternary) hover:text-(--ui-text-tertiary)',
+        children: 'What happened, and what to do'
+      }),
+      jsxs('div', {
+        className: 'mt-1.5 space-y-1.5 border-l border-(--ui-stroke-secondary)/50 pl-2',
+        children: [
+          jsx('div', { children: detail.what }),
+          tried.length
+            ? jsxs('div', {
+                children: [
+                  jsx('span', { className: 'text-(--ui-text-quaternary)', children: 'Already tried: ' }),
+                  jsx('span', { children: tried.join(' · ') })
+                ]
+              })
+            : null,
+          jsxs('div', {
+            children: [
+              jsx('span', { className: 'text-(--ui-text-quaternary)', children: 'Why it stopped: ' }),
+              jsx('span', { children: detail.why })
+            ]
+          }),
+          steps.length
+            ? jsxs('ol', {
+                className: 'mt-1 list-decimal space-y-0.5 pl-4',
+                children: steps.map((step, index) => jsxs('li', {
+                  children: [
+                    jsx('span', { children: step.text }),
+                    step.command
+                      ? jsx('code', {
+                          className: 'ml-1 rounded bg-(--ui-stroke-secondary)/30 px-1 py-0.5 font-mono text-[0.625rem] text-(--ui-text-secondary)',
+                          children: step.command
+                        })
+                      : null
+                  ]
+                }, index))
+              })
+            : null
+        ]
+      })
+    ]
+  })
+}
+
 function IncidentRow({ incident, onRepair, onAck, busy, compact }) {
   return jsxs('div', {
     className: cn('flex items-start gap-2 border-b border-(--ui-stroke-secondary)/40 px-3 last:border-b-0',
@@ -169,31 +224,28 @@ function IncidentRow({ incident, onRepair, onAck, busy, compact }) {
             className: 'mt-0.5 line-clamp-2 text-[0.6875rem] leading-4 text-(--ui-text-tertiary)',
             children: plainCause(incident)
           }),
-          jsx('div', {
-            className: 'mt-1 text-[0.6875rem] leading-4 text-(--ui-text-quaternary)',
-            children: incident.state === 'alerted'
-              ? 'Watchdog already tried. Nothing will change on its own — hide this once you have looked.'
-              : 'Press Fix now and Watchdog will try the repair that matches this failure.'
-          })
+          jsx(IncidentDetail, { incident })
         ]
       }),
       jsxs('div', {
         className: 'flex shrink-0 items-center gap-1',
         children: [
-          jsx(Button, {
-            disabled: busy,
-            onClick: () => onRepair(incident.job_id),
-            size: 'xs',
-            variant: 'secondary',
-            children: 'Fix now'
-          }),
+          (incident.detail && incident.detail.job_exists === false)
+            ? null
+            : jsx(Button, {
+                disabled: busy,
+                onClick: () => onRepair(incident.job_id),
+                size: 'xs',
+                variant: 'secondary',
+                children: 'Try the fix again'
+              }),
           jsx(Button, {
             disabled: busy,
             onClick: () => onAck(incident.incident_id),
             size: 'xs',
             variant: 'ghost',
-            title: 'Hide this and stay quiet unless the same error happens again',
-            children: 'Hide this'
+            title: 'Close this incident — it stays quiet unless the same error comes back',
+            children: 'Ack'
           })
         ]
       })

@@ -43,7 +43,7 @@ Most days: nothing. The plugin’s job is to leave you alone.
 | What you see | What you do |
 | --- | --- |
 | `All clear · N jobs · checked just now` | Nothing. Repairs already ran and were verified. |
-| An incident row | Press **Ack** once you have looked. It stays quiet until the same error returns. |
+| An incident row | Open **What happened, and what to do**: the failure in plain words, what Watchdog already tried, why it stopped, and the exact commands to inspect, fix or pause that job. Press **Ack** once handled. |
 | A row that says **Handed to you** | Watchdog could not fix it — no playbook for that failure, or today's attempt limit is spent. The job is paused where that helps and the incident is marked `alerted` in Hermes itself. This is the only case that needs a person. |
 | **Check everything now** | Runs a check and fixes whatever it can. Nothing else to press. |
 

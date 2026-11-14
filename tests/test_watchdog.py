@@ -208,6 +208,46 @@ class CycleTests(unittest.TestCase):
         self.assertIn("handed to the operator", report["escalated"][0]["detail"])
 
 
+class IncidentExplanationTests(unittest.TestCase):
+    """An incident row must say what failed, what was tried, why it stopped and what to do."""
+
+    def _inc(self, **kw):
+        base = {"incident_id": "i1", "job_id": "job-123", "job_name": "Nightly pricing sync",
+                "failure_type": "timeout", "error": "", "last_seen_at": "2026-11-12T12:00:00+00:00",
+                "output_file": "/home/hermes/.hermes/cron/output/job-123.log"}
+        base.update(kw)
+        return base
+
+    def test_no_error_text_still_explains_and_gives_commands(self):
+        d = sources.explain_incident(self._inc(), {"job_id": "job-123", "name": "Nightly pricing sync"})
+        self.assertIn("Nightly pricing sync failed", d["what"])
+        self.assertIn("no error text", d["what"])
+        commands = [s["command"] for s in d["steps"]]
+        self.assertIn("hermes cron show job-123", commands)
+        self.assertIn("hermes cron run job-123", commands)
+        self.assertTrue(any("tail -n 40" in c for c in commands))
+
+    def test_deleted_job_says_so_and_offers_no_rerun(self):
+        d = sources.explain_incident(self._inc(), None)
+        self.assertIn("deleted", d["why"])
+        self.assertFalse(d["job_exists"])
+        self.assertFalse([s for s in d["steps"] if "cron run" in s["command"]])
+
+    def test_failed_attempt_explains_why_it_stopped(self):
+        d = sources.explain_incident(
+            self._inc(), {"job_id": "job-123"},
+            last_attempt={"playbook": "builtin-rerun-timeout", "outcome": "failed",
+                          "detail": "rerun_job", "started_at": "2026-11-12T13:00:00+00:00"},
+            attempts_today=2)
+        self.assertTrue(any("ran the job again" in t for t in d["tried"]))
+        self.assertIn("did not hold", d["why"])
+        self.assertIn("2 attempts today", " ".join(d["tried"]))
+
+    def test_error_text_is_shown_when_hermes_recorded_it(self):
+        d = sources.explain_incident(self._inc(error="ModuleNotFoundError: pandas"), {"job_id": "job-123"})
+        self.assertIn("ModuleNotFoundError", d["what"])
+
+
 class ToolPlaybookSafetyTests(unittest.TestCase):
     def test_check_steps_are_refused_from_the_tool(self):
         err = playbooks.tool_playbook_error({

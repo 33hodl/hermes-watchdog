@@ -148,6 +148,118 @@ def job_health(job: Dict[str, Any]) -> str:
     return "ok"
 
 
+
+# ── what a person actually needs on an incident ──────────────────────────────
+#
+# An incident row that says "a failure happened, hide it" is the dead end this
+# plugin exists to remove. Every open incident is expanded into four plain parts:
+# what happened, what Watchdog already tried, why it stopped, and the exact steps
+# (with commands) the operator can take. Wording lives here so it is testable.
+
+_VERB_TEXT = {
+    "rerun_job": "ran the job again",
+    "pause_job": "paused the job",
+    "check": "ran a check",
+    "escalate": "handed it to you",
+}
+
+
+def _ago(ts: Optional[str]) -> str:
+    """'18h ago' from an ISO stamp, '' when unreadable."""
+    if not ts:
+        return ""
+    try:
+        from datetime import datetime, timezone
+        when = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=timezone.utc)
+        secs = (datetime.now(timezone.utc) - when).total_seconds()
+    except Exception:  # noqa: BLE001
+        return ""
+    if secs < 90:
+        return "just now"
+    if secs < 5400:
+        return f"{int(secs // 60)}m ago"
+    if secs < 172800:
+        return f"{int(secs // 3600)}h ago"
+    return f"{int(secs // 86400)}d ago"
+
+
+def explain_incident(
+    inc: Dict[str, Any],
+    job: Optional[Dict[str, Any]],
+    *,
+    last_attempt: Optional[Dict[str, Any]] = None,
+    attempts_today: int = 0,
+) -> Dict[str, Any]:
+    """Four plain-language parts for one open incident.
+
+    ``what`` is what failed and when; ``tried`` lists what Watchdog already did;
+    ``why`` says why it stopped instead of trying again; ``steps`` are the concrete
+    actions for the operator, each with the command when one exists.
+    """
+    job_id = str(inc.get("job_id") or "")
+    name = str(inc.get("job_name") or job_id or "A scheduled job")
+    job_exists = job is not None
+    error = str(inc.get("error") or "").strip()
+    seen = _ago(inc.get("last_seen_at"))
+    output_file = str(inc.get("output_file") or "").strip()
+
+    what = f"{name} failed"
+    if seen:
+        what += f" ({seen})"
+    if error:
+        what += f": {error[:240]}"
+    else:
+        what += ". Hermes stored no error text for it — the run's own output is the only detail."
+
+    tried: List[str] = []
+    if last_attempt:
+        verbs = [
+            _VERB_TEXT.get(v, v)
+            for v in str(last_attempt.get("detail") or "").split(",")
+            if v.strip()
+        ]
+        happened = _ago(last_attempt.get("started_at"))
+        outcome = str(last_attempt.get("outcome") or "")
+        did = ", ".join(verbs) or f"ran the \"{last_attempt.get('playbook') or 'matching'}\" repair"
+        line = f"Watchdog {did}"
+        if happened:
+            line += f" {happened}"
+        if outcome == "repaired":
+            line += " — it looked fixed, then failed again"
+        elif outcome == "escalated":
+            line += " — and handed it to you"
+        elif outcome == "failed":
+            line += " — the repair did not hold"
+        tried.append(line)
+    if attempts_today:
+        tried.append(f"{attempts_today} attempt{'s' if attempts_today != 1 else ''} today for this failure")
+
+    if not job_exists:
+        why = "The job this came from has been deleted, so there is nothing left to re-run."
+    elif last_attempt and str(last_attempt.get("outcome")) in ("escalated", "failed"):
+        why = "Watchdog already tried the repair that matches this failure and it did not hold. Repeating it would fail the same way."
+    elif last_attempt is None:
+        why = "No repair rule matches this kind of failure, so Watchdog will not guess at a fix."
+    else:
+        why = "Today's attempts for this failure are used up; trying again would just repeat them."
+
+    steps: List[Dict[str, str]] = []
+    if job_exists:
+        steps.append({"text": "See what this job does and when it last ran", "command": f"hermes cron show {job_id}"})
+        if output_file:
+            steps.append({"text": "Read the run's own output — it has the real error",
+                          "command": f"tail -n 40 {output_file}"})
+        steps.append({"text": "Fix the cause, then run it once by hand", "command": f"hermes cron run {job_id}"})
+        steps.append({"text": "Or stop it retrying on its own schedule", "command": f"hermes cron pause {job_id}"})
+    steps.append({"text": "Press Ack on this row when you have handled it — it stays quiet until the same error comes back",
+                  "command": ""})
+
+    return {"what": what, "tried": tried, "why": why, "steps": steps,
+            "output_file": output_file, "job_exists": job_exists,
+            "last_seen_at": inc.get("last_seen_at") or ""}
+
 def snapshot(job_id: Optional[str] = None) -> Dict[str, Any]:
     """Full read-only picture: jobs, open incidents, and whether upstream answered.
 
@@ -169,8 +281,17 @@ def snapshot(job_id: Optional[str] = None) -> Dict[str, Any]:
         log.debug("watchdog: cron incidents unavailable: %s", exc)
         errors.append(f"incidents: {exc}")
     names = {j["job_id"]: j["name"] for j in jobs if j.get("name")}
+    by_id = {j["job_id"]: j for j in jobs}
     for inc in incidents:
         inc["job_name"] = names.get(inc.get("job_id"), inc.get("job_id", ""))
+        try:
+            from . import ledger as _ledger
+            last = _ledger.last_attempt_for(inc["incident_id"])
+            used = _ledger.attempts_today(inc["incident_id"])
+        except Exception:  # noqa: BLE001 - the explanation must not block the report
+            last, used = None, 0
+        inc["detail"] = explain_incident(inc, by_id.get(inc.get("job_id")),
+                                         last_attempt=last, attempts_today=used)
     if job_id:
         jobs = [j for j in jobs if j["job_id"] == job_id]
 

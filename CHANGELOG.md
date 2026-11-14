@@ -54,6 +54,23 @@ reading the code. Each fix is one behaviour that made a click look like a no-op.
   falls back to a plugin-local ledger file under `plugin-data/`, the same degradation
   `_data_dir()` already had, so the pane shows "no repairs yet" instead of an error.
 
+## 0.6.0
+
+An incident row now answers the four questions a person actually has, instead of
+saying a failure happened and inviting them to hide it:
+
+- **What happened** — the job's name, when it failed, and Hermes's own error text
+  (or, when Hermes stored none, that the run's output is the only detail).
+- **Already tried** — the repairs Watchdog ran on this incident and how each ended.
+- **Why it stopped** — job deleted, no repair rule matches, today's attempts used up,
+  or the matching repair did not hold. Different reasons, different next steps.
+- **What to do** — numbered steps with the literal commands: `hermes cron show`,
+  `tail -n 40 <output file>`, `hermes cron run`, `hermes cron pause`, then `Ack`.
+
+`Try the fix again` only appears when the job still exists. The detail opens by
+itself on rows that need you, and stays folded otherwise. Wording is generated
+server-side (`sources.explain_incident`) and covered by four tests.
+
 ## 0.5.1
 
 - **The status-bar chip is a signal now, not a label.** It appears only when at least
