@@ -13,7 +13,6 @@ import {
   Badge,
   Button,
   Codicon,
-  EmptyState,
   GlyphSpinner,
   ScrollArea,
   StatusDot,
@@ -39,16 +38,6 @@ const HEALTH_LABEL = {
 
 // Jargon out: a person reading the pane should not need to know what Hermes calls
 // each failure class.
-const PLAIN_CAUSE = {
-  timeout: 'It ran too long and was stopped.',
-  delivery: 'The message it sends did not go out.',
-  agent: 'The assistant hit an error while running it.',
-  script: 'Its script exited with an error.',
-  auth: 'It could not sign in to something it needs.',
-  config: 'Its settings are wrong or missing.',
-  interrupted: 'It was stopped before it finished — the machine slept, or Hermes restarted.',
-  unknown: 'Hermes recorded a failure but no details.'
-}
 
 /** A job id is not a name a person can act on. */
 function jobLabel(jobName, jobId) {
@@ -58,13 +47,6 @@ function jobLabel(jobName, jobId) {
   return 'A job that no longer exists'
 }
 
-function plainCause(incident) {
-  const error = String((incident && incident.error) || '').toLowerCase()
-  if (error.includes('interrupt')) {
-    return PLAIN_CAUSE.interrupted
-  }
-  return PLAIN_CAUSE[(incident && incident.failure_type) || 'unknown'] || PLAIN_CAUSE.unknown
-}
 const OUTCOME_TONE = { repaired: 'good', failed: 'bad', escalated: 'warn', running: 'muted' }
 
 const POLL_MS = 15000
@@ -277,69 +259,6 @@ function IncidentDetail({ incident }) {
   })
 }
 
-function IncidentRow({ incident, onRepair, onAck, busy, compact }) {
-  return jsxs('div', {
-    className: cn('flex items-start gap-2 border-b border-(--ui-stroke-secondary)/40 px-3 last:border-b-0',
-      compact ? 'py-2' : 'py-3'),
-    children: [
-      jsx(StatusDot, { className: 'mt-1.5', tone: 'bad' }),
-      jsxs('div', {
-        className: 'min-w-0 flex-1',
-        children: [
-          jsxs('div', {
-            className: 'flex items-center gap-1.5',
-            children: [
-              jsx('span', {
-                className: 'truncate text-xs font-medium text-(--ui-text-primary)',
-                title: incident.job_id,
-                children: jobLabel(incident.job_name, incident.job_id)
-              })
-            ]
-          }),
-          incident.detail && incident.detail.what
-            ? null
-            : jsx('div', {
-                className: 'mt-0.5 line-clamp-2 text-[0.6875rem] leading-4 text-(--ui-text-tertiary)',
-                children: plainCause(incident)
-              }),
-          jsx(RunStrip, { runs: incident.runs }),
-          jsx(IncidentDetail, { incident })
-        ]
-      }),
-      jsxs('div', {
-        className: 'flex shrink-0 items-center gap-1',
-        children: [
-          (incident.detail && incident.detail.job_exists === false)
-            ? null
-            : jsx(Button, {
-                disabled: busy,
-                onClick: () => onRepair(incident.job_id),
-                size: 'xs',
-                variant: 'secondary',
-                children: 'Try the fix again'
-              }),
-          (incident.detail && incident.detail.job_exists === false)
-            ? null
-            : jsx(Button, {
-                onClick: () => host.navigate('/cron'),
-                size: 'xs',
-                variant: 'ghost',
-                title: 'Open the Cron page to see this job and its runs',
-                children: 'Open Cron'
-              }),
-          jsx(Button, {
-            disabled: busy,
-            onClick: () => onAck(incident.incident_id),
-            size: 'xs',
-            variant: 'ghost',
-            title: 'Mark this handled — it stays quiet unless the same error comes back',
-            children: 'Done'
-          })
-        ]
-      })
-    ]
-  })
-}
 
 const PLAIN_OUTCOME = {
   repaired: 'Fixed',
@@ -428,14 +347,66 @@ function byJob(repairs) {
   return Array.from(groups.values()).sort((a, b) => (b.started_at || 0) - (a.started_at || 0))
 }
 
-function SectionLabel({ children }) {
-  return jsx('div', {
-    className: 'px-3 pt-3 pb-1 text-[0.625rem] font-medium tracking-wide text-(--ui-text-quaternary) uppercase',
-    children
+
+/** Shared body: the docked pane renders it compact, the sidebar page renders it full width. */
+function Fold({ title, children }) {
+  return jsxs('details', {
+    className: 'mt-3 border-t border-(--ui-stroke-secondary)/50 pt-2',
+    children: [
+      jsx('summary', {
+        className: 'cursor-pointer select-none rounded text-xs text-(--ui-text-tertiary) hover:text-(--ui-text-secondary) focus-visible:ring-1 focus-visible:ring-(--ui-stroke-secondary) focus-visible:outline-none',
+        children: title
+      }),
+      jsx('div', { className: 'mt-2', children })
+    ]
   })
 }
 
-/** Shared body: the docked pane renders it compact, the sidebar page renders it full width. */
+/** One thing that needs a person: one sentence, two buttons, nothing else. */
+function IssueCard({ incident, onAsk, onAck, busy }) {
+  const detail = incidentDetail(incident)
+  const label = String(incident.job_name || '').toLowerCase().includes('sweep')
+    ? "Watchdog's own check"
+    : jobLabel(incident.job_name, incident.job_id)
+  const seenAt = incident.detail && incident.detail.last_seen_at
+  return jsxs('div', {
+    className: 'mb-3 rounded-lg border border-(--ui-text-warning)/30 p-3',
+    children: [
+      jsx('div', { className: 'text-sm font-medium text-(--ui-text-primary)', children: label }),
+      jsx('div', { className: 'mt-1 text-xs leading-5 text-(--ui-text-secondary)', children: detail.summary }),
+      seenAt
+        ? jsx('div', {
+            className: 'mt-0.5 text-[0.6875rem] text-(--ui-text-quaternary)',
+            title: new Date(seenAt).toLocaleString(),
+            children: 'last failed ' + relative(Date.parse(seenAt) / 1000)
+          })
+        : null,
+      jsx(RunStrip, { runs: incident.runs }),
+      jsxs('div', {
+        className: 'mt-2.5 flex flex-wrap items-center gap-1.5',
+        children: [
+          jsx(Button, {
+            disabled: busy,
+            onClick: () => onAsk(incident),
+            size: 'xs',
+            variant: 'default',
+            children: busy ? 'Asking Hermes…' : 'Ask Hermes to fix it'
+          }),
+          jsx(Button, {
+            disabled: busy,
+            onClick: () => onAck(incident.incident_id),
+            size: 'xs',
+            variant: 'ghost',
+            title: 'Hide this until the same error comes back',
+            children: 'Done'
+          })
+        ]
+      }),
+      jsx(IncidentDetail, { incident })
+    ]
+  })
+}
+
 function WatchdogBody({ ctx, compact }) {
   const client = useQueryClient()
   const { data, error, isFetching, refetch } = useWatchdog(ctx)
@@ -504,6 +475,7 @@ function WatchdogBody({ ctx, compact }) {
   const [demoBusy, setDemoBusy] = useState(false)
   // A toast disappears; the answer to "what now?" has to stay on the page.
   const [outcome, setOutcome] = useState(null)
+  const [busyId, setBusyId] = useState(null)
   const runDemo = async () => {
     if (!ctx || !ctx.rest || demoBusy) {
       return
@@ -599,117 +571,128 @@ function WatchdogBody({ ctx, compact }) {
   const summary = data.repairs || {}
   const counts = data.counts || {}
 
+  const askHermes = async incident => {
+    if (!ctx || !ctx.rest) {
+      return
+    }
+    setBusyId(incident.incident_id)
+    const result = await ctx
+      .rest('/handoff', { body: { incident_id: incident.incident_id }, method: 'POST' })
+      .catch(thrown => ({ ok: false, error: String(thrown) }))
+    setBusyId(null)
+    setOutcome(result && result.ok
+      ? { at: Date.now(), tone: 'good',
+          text: 'Hermes is on it — it is diagnosing that job now, and its answer arrives here as a message.',
+          next: 'Nothing else is needed from you.' }
+      : { at: Date.now(), tone: 'warn',
+          text: 'Could not hand it to Hermes: ' + ((result && result.error) || 'no reason returned'),
+          next: 'The issue stays open, so nothing is lost.' })
+    client.invalidateQueries({ queryKey: KEY })
+  }
+
+  const needsYou = incidents.length
+  const headline = (counts.jobs || 0) === 0
+    ? 'No scheduled jobs yet.'
+    : needsYou === 0
+      ? 'Everything is running as it should.'
+      : needsYou === 1
+        ? 'One thing needs you.'
+        : needsYou + ' things need you.'
+  const subline = [
+    (counts.jobs || 0) === 0 ? null : (counts.jobs || 0) + ' scheduled jobs',
+    data.last_cycle && !data.last_cycle.dry_run ? checked(data.last_cycle.checked_at) : null
+  ].filter(Boolean).join(' · ')
+
+  // Demo rows are noise for a person looking at their own fleet: only show them
+  // when there is nothing else to show.
+  const realRepairs = byJob(repairs.filter(repair => !repair.demo))
+
   return jsxs('div', {
     className: 'flex h-full min-h-0 flex-col',
     children: [
       jsxs('div', {
-        className: 'flex items-center gap-2 border-b border-(--ui-stroke-secondary) px-3 py-2',
+        className: 'border-b border-(--ui-stroke-secondary) px-4 pt-4 pb-3',
         children: [
-          jsx(StatusDot, { tone: TONE[health] || 'muted' }),
-          jsx('span', {
-            className: 'text-xs font-medium text-(--ui-text-primary)',
-            children: HEALTH_LABEL[health] || health
-          }),
-          jsx('span', {
-            className: 'text-[0.6875rem] text-(--ui-text-tertiary)',
-            children: (counts.jobs === 0
-              ? 'no jobs yet'
-              : incidents.length === 0
-                ? (counts.jobs || 0) + ' jobs watched'
-                : incidents.length + (incidents.length === 1 ? ' needs you' : ' need you')
-                  + ' · ' + (counts.jobs || 0) + ' jobs watched')
-              + (data.last_cycle && !data.last_cycle.dry_run
-                ? ' · ' + checked(data.last_cycle.checked_at)
-                : '')
-          }),
-          jsx('span', { className: 'flex-1' }),
-          jsx(Button, {
-            disabled: isFetching,
-            onClick: () => refetch(),
-            size: 'icon-xs',
-            variant: 'ghost',
-            children: jsx(Codicon, { name: 'refresh' })
-          })
-        ]
-      }),
-      jsxs('div', {
-        className: 'flex items-center gap-1.5 px-3 py-2',
-        children: [
-          jsx(Button, { onClick: () => run(null, false), size: 'xs', variant: 'default', children: 'Check everything now' }),
-          jsx(Button, {
-            disabled: demoBusy,
-            onClick: runDemo,
-            size: 'xs',
-            variant: 'secondary',
-            title: 'Creates a job, breaks it, fixes it and deletes it — all on this machine',
-            children: demoBusy ? 'Running the demo…' : 'Show me a fix'
-          }),
-          jsx('span', {
-            className: 'self-center text-[0.6875rem] text-(--ui-text-quaternary)',
-            children: repairs.length === 0
-              ? 'Or watch one on a job Watchdog breaks on purpose.'
-              : 'Runs a check and fixes whatever it can.'
-          })
-        ]
-      }),
-      outcome
-        ? jsxs('div', {
-            'aria-live': 'polite',
-            role: 'status',
-            className: cn('mx-3 mb-2 rounded border px-2 py-1.5 text-xs leading-5',
-              outcome.tone === 'good'
-                ? 'border-(--ui-stroke-secondary)/60 text-(--ui-text-secondary)'
-                : 'border-(--ui-text-warning)/40 text-(--ui-text-secondary)'),
+          jsxs('div', {
+            className: 'flex items-start gap-2',
             children: [
-              jsx('div', { children: outcome.text }),
-              outcome.next
-                ? jsx('div', { className: 'mt-0.5 text-[0.6875rem] text-(--ui-text-tertiary)', children: outcome.next })
-                : null
+              jsx(StatusDot, { className: 'mt-1', tone: needsYou === 0 ? 'good' : 'warn' }),
+              jsxs('div', {
+                className: 'min-w-0 flex-1',
+                children: [
+                  jsx('div', { className: 'text-sm font-medium text-(--ui-text-primary)', children: headline }),
+                  subline
+                    ? jsx('div', { className: 'mt-0.5 text-xs text-(--ui-text-tertiary)', children: subline })
+                    : null
+                ]
+              }),
+              jsx(Button, {
+                disabled: isFetching,
+                onClick: () => refetch(),
+                size: 'icon-xs',
+                variant: 'ghost',
+                title: 'Check again',
+                children: jsx(Codicon, { name: 'refresh' })
+              })
             ]
-          })
-        : null,
+          }),
+          outcome
+            ? jsxs('div', {
+                'aria-live': 'polite',
+                role: 'status',
+                className: cn('mt-2 rounded border px-2 py-1.5 text-xs leading-5',
+                  outcome.tone === 'good'
+                    ? 'border-(--ui-stroke-secondary)/60 text-(--ui-text-secondary)'
+                    : 'border-(--ui-text-warning)/40 text-(--ui-text-secondary)'),
+                children: [
+                  jsx('div', { children: outcome.text }),
+                  outcome.next
+                    ? jsx('div', { className: 'mt-0.5 text-[0.6875rem] text-(--ui-text-tertiary)', children: outcome.next })
+                    : null
+                ]
+              })
+            : null
+        ]
+      }),
       jsx(ScrollArea, {
         className: 'min-h-0 flex-1',
         children: jsxs('div', {
+          className: 'px-4 py-3',
           children: [
-            (counts.jobs || 0) === 0 && incidents.length === 0
-              ? jsxs('div', {
-                  className: 'px-3 pt-3 pb-1',
-                  children: [
-                    jsx(EmptyState, { title: 'No scheduled jobs yet' }),
-                    jsx('div', {
-                      className: 'mt-1 text-xs text-(--ui-text-tertiary)',
-                      children: 'Create a cron job and Watchdog starts watching it: it runs the repair that matches the failure, then checks Hermes\'s own record to see whether the next run worked.'
-                    })
-                  ]
-                })
-              : null,
-            incidents.length === 0
-              ? null
-              : jsx(SectionLabel, { children: incidents.length === 1 ? '1 job needs you' : incidents.length + ' jobs need you' }),
-            incidents.map(incident =>
-                  jsx(IncidentRow, {
-                    busy: isFetching,
-                    compact,
-                    incident,
-                    key: incident.incident_id,
-                    onAck: ack,
-                    onRepair: jobId => run(jobId, false)
+            incidents.map(incident => jsx(IssueCard, {
+              busy: busyId === incident.incident_id,
+              incident,
+              key: incident.incident_id,
+              onAck: ack,
+              onAsk: askHermes
+            })),
+            jsx(Fold, {
+              title: 'What Watchdog does',
+              children: jsxs('div', {
+                className: 'space-y-1 text-xs leading-5 text-(--ui-text-tertiary)',
+                children: [
+                  jsx('p', { children: 'It watches every scheduled job in this profile. When one fails it tries the repair that fits — run it again, restart what broke, or pause it so it stops burning the schedule — then checks Hermes\'s own run record to see whether the next run actually worked.' }),
+                  jsx('p', { children: 'It only stops to ask when a repair would be a guess: it says what broke and what you can do. Marking something done keeps it quiet until the same error comes back.' })
+                ]
+              })
+            }),
+            jsx(Fold, {
+              title: realRepairs.length
+                ? 'What it did recently (' + realRepairs.length + ')'
+                : 'What it did recently',
+              children: realRepairs.length === 0
+                ? jsx('div', { className: 'text-xs text-(--ui-text-tertiary)', children: 'Nothing yet. Repairs appear here once a job fails and Watchdog handles it.' })
+                : jsx('div', {
+                    children: realRepairs.map(group => jsx(RepairRow, {
+                      key: group.job_id + '-' + group.started_at,
+                      repair: group
+                    }))
                   })
-                ),
-            jsx(SectionLabel, { children: 'Recent repairs' }),
-            repairs.length === 0
-              ? jsx('div', {
-                  className: 'px-3 pb-3 text-[0.6875rem] text-(--ui-text-tertiary)',
-                  children: 'No repair attempts recorded yet.'
-                })
-              : byJob(repairs).map(group =>
-                  jsx(RepairRow, { compact, key: group.job_id + '-' + group.started_at, repair: group })
-                ),
+            }),
             data.upstream && data.upstream.ok === false
               ? jsx('div', {
-                  className: 'px-3 py-2 text-[0.6875rem] text-(--ui-text-quaternary)',
-                  children: 'Upstream unavailable: ' + ((data.upstream.errors || []).join('; '))
+                  className: 'mt-2 text-[0.6875rem] text-(--ui-text-quaternary)',
+                  children: 'Hermes could not be read: ' + ((data.upstream.errors || []).join('; '))
                 })
               : null
           ]
@@ -719,39 +702,6 @@ function WatchdogBody({ ctx, compact }) {
   })
 }
 
-/** Three numbered steps: what happens, and why it matters. */
-function HowItWorks() {
-  const steps = [
-    ['1', 'It checks every scheduled job after it runs.'],
-    ['2', 'A job that fails gets the matching fix, and only counts as fixed if its next run succeeds.'],
-    ['3', 'You only see the jobs it could not fix.']
-  ]
-
-  return jsxs('details', {
-    className: 'mx-6 mb-3 rounded-md border border-(--ui-stroke-secondary)/60 bg-(--ui-bg-secondary)/40 px-4 py-2.5',
-    children: [
-      jsx('summary', {
-        className: 'cursor-pointer text-[0.6875rem] font-medium tracking-wide text-(--ui-text-tertiary) uppercase',
-        children: 'How this works'
-      }),
-      jsxs('div', {
-        className: 'mt-2 grid gap-2',
-        children: [
-        ...steps.map(([n, what]) => jsxs('div', {
-          className: 'flex items-center gap-2.5',
-          children: [
-            jsx('div', {
-              className: 'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-(--ui-stroke-secondary) text-[0.6875rem] text-(--ui-text-secondary)',
-              children: n
-            }),
-            jsx('div', { className: 'text-xs text-(--ui-text-primary)', children: what })
-          ]
-        }, `step-${n}`))
-        ]
-      })
-    ]
-  })
-}
 
 /** The sidebar page — full width, same report, works on every layout. */
 function WatchdogPage({ ctx }) {
@@ -768,7 +718,6 @@ function WatchdogPage({ ctx }) {
           })
         ]
       }),
-      jsx(HowItWorks, {}),
       jsx('div', {
         className: 'mx-6 mb-4 min-h-0 flex-1 overflow-hidden rounded-md border border-(--ui-stroke-secondary)',
         children: jsx(WatchdogBody, { compact: false, ctx })

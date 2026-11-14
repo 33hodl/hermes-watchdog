@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from hermes_watchdog import playbooks, repair, sources  # noqa: E402
+from hermes_watchdog import handoff, playbooks, repair, sources  # noqa: E402
 
 
 def _incident(ftype="timeout", job_id="job-1", error="upstream timed out after 30s", state="detected"):
@@ -243,6 +243,20 @@ class IncidentExplanationTests(unittest.TestCase):
         self.assertIn("did not hold", d["why"])
         self.assertIn("2 attempts today", " ".join(d["tried"]))
 
+    def test_one_plain_sentence_per_incident(self):
+        swept = sources.explain_incident(
+            self._inc(job_name="Silent repair sweep (cron incidents)"), {"job_id": "job-123"})
+        self.assertIn("Nothing of yours is broken", swept["summary"])
+
+        failed = sources.explain_incident(
+            self._inc(), {"job_id": "job-123"},
+            last_attempt={"playbook": "builtin-rerun-timeout", "outcome": "failed",
+                          "detail": "rerun_job", "started_at": "2026-11-12T13:00:00+00:00"})
+        self.assertIn("needs a real fix", failed["summary"])
+
+        gone = sources.explain_incident(self._inc(), None)
+        self.assertIn("deleted", gone["summary"])
+
     def test_watchdogs_own_sweep_says_it_is_not_your_job(self):
         d = sources.explain_incident(self._inc(job_name="Silent repair sweep (cron incidents)",
                                                job_id="ee15", error="GatewayUnavailableError"),
@@ -288,6 +302,45 @@ class ToolPlaybookSafetyTests(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(seen["env"].get("PATH"), "/bin")
         self.assertNotIn("OPENAI_API_KEY", seen["env"])
+
+
+class AgentHandoffTests(unittest.TestCase):
+    """The page's main button asks the agent to fix it, with the context we hold."""
+
+    def test_prompt_says_diagnose_not_rerun(self):
+        prompt = handoff.build_prompt({
+            "job_id": "abc123", "job_name": "Nightly pricing sync",
+            "error": "ModuleNotFoundError: pandas", "output_file": "/tmp/out.log",
+            "last_seen_at": "2026-11-14T00:00:00+00:00"})
+        self.assertIn("Nightly pricing sync", prompt)
+        self.assertIn("ModuleNotFoundError", prompt)
+        self.assertIn("/tmp/out.log", prompt)
+        self.assertIn("do not simply re-run the job", prompt)
+        self.assertIn("what a person must change", prompt)
+
+    def test_prompt_for_watchdogs_own_check_asks_to_confirm_not_repair(self):
+        prompt = handoff.build_prompt({"job_id": "ee1", "job_name": "Silent repair sweep (cron incidents)"})
+        self.assertIn("not one of the user's jobs", prompt)
+        self.assertIn("Hermes restart", prompt)
+
+    def test_handoff_without_a_job_is_refused_not_guessed(self):
+        self.assertFalse(handoff.hand_off({"incident_id": "i1", "job_id": ""})["ok"])
+
+    def test_recurring_failure_reopens_a_done_incident(self):
+        acked = {"incident_id": "i1", "state": "acked", "acked_at": "2026-11-13T00:00:00+00:00",
+                 "last_seen_at": "2026-11-14T00:00:00+00:00"}
+        with patch.object(sources, "open_incidents", return_value=[acked]), \
+                patch("cron.incidents.set_incident_state", return_value=True) as set_state:
+            self.assertEqual(sources.reopen_recurring(), ["i1"])
+            set_state.assert_called_once_with("i1", "detected")
+
+    def test_quiet_incident_is_not_reopened_without_a_new_failure(self):
+        acked = {"incident_id": "i2", "state": "acked", "acked_at": "2026-11-14T00:00:00+00:00",
+                 "last_seen_at": "2026-11-13T00:00:00+00:00"}
+        with patch.object(sources, "open_incidents", return_value=[acked]), \
+                patch("cron.incidents.set_incident_state") as set_state:
+            self.assertEqual(sources.reopen_recurring(), [])
+            set_state.assert_not_called()
 
 
 class CycleStampTests(unittest.TestCase):

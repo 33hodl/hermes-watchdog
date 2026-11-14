@@ -185,6 +185,34 @@ def _ago(ts: Optional[str]) -> str:
     return f"{int(secs // 86400)}d ago"
 
 
+def reopen_recurring() -> List[str]:
+    """Re-open incidents that were marked done and then happened again.
+
+    ``Done`` promises quiet until the same error returns. Core keeps an acked incident
+    acked, so without this a recurring failure would stay invisible forever. An acked
+    incident whose ``last_seen_at`` moved past ``acked_at`` is opened again as
+    ``detected`` so the next cycle handles it and the page shows it.
+    """
+    reopened: List[str] = []
+    for inc in open_incidents():
+        if inc.get("state") != "acked":
+            continue
+        acked, seen = inc.get("acked_at"), inc.get("last_seen_at")
+        if not acked or not seen:
+            continue
+        try:
+            from datetime import datetime
+            def _t(v):
+                return datetime.fromisoformat(str(v).replace("Z", "+00:00"))
+            if _t(seen) > _t(acked):
+                from cron import incidents as _inc
+                if _inc.set_incident_state(inc["incident_id"], "detected"):
+                    reopened.append(inc["incident_id"])
+        except Exception:  # noqa: BLE001 - a failed reopen must not stop the cycle
+            continue
+    return reopened
+
+
 def explain_incident(
     inc: Dict[str, Any],
     job: Optional[Dict[str, Any]],
@@ -270,7 +298,18 @@ def explain_incident(
         steps.append({"text": "Press Done on this row when you have handled it — it stays quiet "
                               "until the same error comes back", "command": ""})
 
-    return {"what": what, "tried": tried, "why": why, "steps": steps,
+    if self_check:
+        summary = "Watchdog's own check tripped while Hermes restarted. Nothing of yours is broken."
+    elif not job_exists:
+        summary = "This job was deleted, so there is nothing left to fix."
+    elif last_attempt and str(last_attempt.get("outcome")) in ("escalated", "failed"):
+        summary = "It failed again after the automatic repair, so it needs a real fix."
+    elif last_attempt is None:
+        summary = "Watchdog has no safe fix for this one, so it stopped instead of guessing."
+    else:
+        summary = "Today's automatic attempts are used up, and the failure is still there."
+
+    return {"summary": summary, "what": what, "tried": tried, "why": why, "steps": steps,
             "output_file": output_file, "job_exists": job_exists,
             "last_seen_at": inc.get("last_seen_at") or ""}
 

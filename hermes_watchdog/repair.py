@@ -219,6 +219,12 @@ def cycle(
 ) -> Dict[str, Any]:
     """Run one repair cycle. Returns a report the tools, pane and digest all share."""
     started = time.time()
+    # "Done" means quiet until it happens again — never gone for good.
+    if not dry_run:
+        try:
+            sources.reopen_recurring()
+        except Exception:  # noqa: BLE001 - reopening is best-effort; the cycle still runs
+            pass
     snap = sources.snapshot(job_id=job_id)
     books = playbooks.all_playbooks(data_dir)
     names = {j["job_id"]: j["name"] for j in snap["jobs"]}

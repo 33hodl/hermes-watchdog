@@ -20,7 +20,7 @@ _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:  # the engine package lives at the plugin root
     sys.path.insert(0, str(_ROOT))
 
-from hermes_watchdog import demo, ledger, playbooks, repair, sources  # noqa: E402
+from hermes_watchdog import demo, handoff, ledger, playbooks, repair, sources  # noqa: E402
 
 router = APIRouter()
 
@@ -33,6 +33,10 @@ def _data_dir() -> Optional[Path]:
         return plugin_data_dir(PLUGIN_ID)
     except Exception:  # noqa: BLE001 - pane degrades to built-in playbooks only
         return None
+
+
+class HandoffRequest(BaseModel):
+    incident_id: str = Field(..., description="Incident to hand to the agent to fix.")
 
 
 class AckRequest(BaseModel):
@@ -62,6 +66,18 @@ async def run_repair(body: RepairRequest) -> Dict[str, Any]:
 async def ack(body: AckRequest) -> Dict[str, Any]:
     closed, reason = sources.ack(body.incident_id)
     return {"closed": closed, "incident_id": body.incident_id, "reason": reason}
+
+
+@router.post("/handoff")
+async def hand_off(body: HandoffRequest) -> Dict[str, Any]:
+    """The page's primary action: ask Hermes to fix it, with the context we already have."""
+    snap = sources.snapshot()
+    incident = next((i for i in snap.get("incidents", [])
+                     if i.get("incident_id") == body.incident_id), None)
+    if incident is None:
+        return {"ok": False, "error": "that incident is no longer open"}
+    job = next((j for j in snap.get("jobs", []) if j.get("job_id") == incident.get("job_id")), None)
+    return handoff.hand_off(incident, job)
 
 
 @router.post("/demo")
