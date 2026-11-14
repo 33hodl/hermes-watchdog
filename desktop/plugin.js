@@ -196,7 +196,7 @@ function fallbackDetail(incident) {
     steps.push({ text: 'Fix the cause, then run it once by hand', command: 'hermes cron run ' + incident.job_id })
     steps.push({ text: 'Or stop it retrying on its own schedule', command: 'hermes cron pause ' + incident.job_id })
   }
-  steps.push({ text: 'Press Done when you have handled it — it stays quiet until the same error returns' })
+  steps.push({ text: 'Press Done when you have handled it — that exact error stays quiet for good; a different one shows up as a new row' })
   return { what: what, tried: [], why: why, steps: steps }
 }
 
@@ -398,7 +398,7 @@ function IssueCard({ incident, onAsk, onAck, busy }) {
             onClick: () => onAck(incident.incident_id),
             size: 'xs',
             variant: 'ghost',
-            title: 'Hide this until the same error comes back',
+            title: 'Hide this error for this job, for good',
             children: 'Done'
           })
         ]
@@ -547,7 +547,7 @@ function WatchdogBody({ ctx, compact }) {
       .catch(thrown => ({ error: String(thrown) }))
 
     setOutcome(result && result.closed
-      ? { at: Date.now(), text: 'Marked done — the row is gone and stays quiet unless the same error returns',
+      ? { at: Date.now(), text: 'Marked done — that error stays quiet for good; a different failure shows up as a new row',
           tone: 'good', next: 'Nothing else to do for it.' }
       : { at: Date.now(), text: 'Could not close it: ' + ((result && result.reason) || 'no reason returned'),
           tone: 'warn', next: 'The row stays open so the failure is not lost.' })
@@ -555,7 +555,7 @@ function WatchdogBody({ ctx, compact }) {
     host.notify({
       kind: result && result.closed ? 'success' : 'warning',
       message: result && result.closed
-        ? 'Hidden — you will only hear about it if this happens again'
+        ? 'Hidden — you will only hear about it if it fails differently'
         : (result && result.error && String(result.error).includes('404')
             ? 'This plugin build is not loaded in the gateway yet — restart the gateway (hermes gateway restart), then reload'
             : 'Could not close it: ' + ((result && result.reason) || 'no reason returned (restart the gateway so the new route loads)'))
@@ -716,7 +716,7 @@ function WatchdogBody({ ctx, compact }) {
                 className: 'space-y-1 text-xs leading-5 text-(--ui-text-tertiary)',
                 children: [
                   jsx('p', { children: 'It watches every scheduled job in this profile. When one fails it tries the repair that fits — run it again, restart what broke, or pause it so it stops burning the schedule — then checks Hermes\'s own run record to see whether the next run actually worked.' }),
-                  jsx('p', { children: 'It only stops to ask when a repair would be a guess: it says what broke and what you can do. Marking something done keeps it quiet until the same error comes back.' })
+                  jsx('p', { children: 'It only stops to ask when a repair would be a guess: it says what broke and what you can do. Marking something done keeps that exact error quiet for good; a different failure comes back as a new row.' })
                 ]
               })
             }),

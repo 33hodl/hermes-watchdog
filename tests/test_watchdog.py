@@ -326,21 +326,6 @@ class AgentHandoffTests(unittest.TestCase):
     def test_handoff_without_a_job_is_refused_not_guessed(self):
         self.assertFalse(handoff.hand_off({"incident_id": "i1", "job_id": ""})["ok"])
 
-    def test_recurring_failure_reopens_a_done_incident(self):
-        acked = {"incident_id": "i1", "state": "acked", "acked_at": "2026-11-13T00:00:00+00:00",
-                 "last_seen_at": "2026-11-14T00:00:00+00:00"}
-        with patch.object(sources, "open_incidents", return_value=[acked]), \
-                patch("cron.incidents.set_incident_state", return_value=True) as set_state:
-            self.assertEqual(sources.reopen_recurring(), ["i1"])
-            set_state.assert_called_once_with("i1", "detected")
-
-    def test_quiet_incident_is_not_reopened_without_a_new_failure(self):
-        acked = {"incident_id": "i2", "state": "acked", "acked_at": "2026-11-14T00:00:00+00:00",
-                 "last_seen_at": "2026-11-13T00:00:00+00:00"}
-        with patch.object(sources, "open_incidents", return_value=[acked]), \
-                patch("cron.incidents.set_incident_state") as set_state:
-            self.assertEqual(sources.reopen_recurring(), [])
-            set_state.assert_not_called()
 
 
 class CycleStampTests(unittest.TestCase):
@@ -666,3 +651,61 @@ class DemoCountsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DoneIsTerminalTests(unittest.TestCase):
+    """Done closes core's incident for that exact error signature.
+
+    Core has no ``acked`` state and its ``set_incident_state`` refuses every
+    transition on a ``closed`` row, so a plugin can never move one back: the old
+    ``reopen_recurring`` helper could not fire and is gone. The copy now promises
+    only what core actually does.
+    """
+
+    def test_closed_incident_never_surfaces_as_open(self):
+        with patch.object(sources, "_incidents", return_value=[_incident(state="closed")]):
+            self.assertEqual(sources.open_incidents(), [])
+
+    def test_no_dead_reopen_helper_is_shipped(self):
+        self.assertFalse(hasattr(sources, "reopen_recurring"))
+
+    def test_done_step_says_the_error_stays_quiet_for_good(self):
+        view = sources.explain_incident(_incident(), {"job_id": "job-1", "name": "Nightly"})
+        done = [st["text"] for st in view["steps"] if "Done" in st["text"]]
+        self.assertEqual(len(done), 1, view["steps"])
+        self.assertIn("for good", done[0])
+        self.assertNotIn("until the same error comes back", done[0])
+
+    def test_cycle_still_runs_with_only_closed_incidents(self):
+        d = Path(tempfile.mkdtemp())
+        snap = {"jobs": [], "health": "ok", "counts": {}, "upstream": {"ok": True}, "incidents": []}
+        with patch.object(sources, "snapshot", return_value=snap):
+            report = repair.cycle(data_dir=d, max_incidents=1)
+        self.assertEqual(report["repaired"], [])
+        self.assertEqual(report["stale"], [])
+
+
+class ReadmeDisclosureTests(unittest.TestCase):
+    """The two things a reader cannot infer from the code: the private flag, and
+    what the demo leaves on disk if it is interrupted."""
+
+    def _readme(self):
+        return (ROOT / "README.md").read_text(encoding="utf-8")
+
+    def test_private_contextvar_is_named_and_called_private(self):
+        text = self._readme()
+        self.assertIn("gateway.session_context", text)
+        self.assertIn("_SESSION_ASYNC_DELIVERY", text)
+        self.assertIn("not part of the published plugin API", text)
+
+    def test_demo_footprint_is_disclosed(self):
+        text = self._readme()
+        self.assertIn("$HERMES_HOME/scripts", text)
+        self.assertIn("0755", text)
+
+    def test_done_row_does_not_promise_an_automatic_reopen(self):
+        rows = [ln for ln in self._readme().splitlines() if ln.startswith("| **Done**")]
+        self.assertEqual(len(rows), 1, rows)
+        self.assertNotIn("re-opens it automatically", rows[0])
+        self.assertIn("for good", rows[0])
+

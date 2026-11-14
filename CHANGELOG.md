@@ -3,6 +3,24 @@
 Everything here was found by running the plugin on a real Desktop client, not by
 reading the code. Each fix is one behaviour that made a click look like a no-op.
 
+## 0.5.6
+
+- **README: the private contextvar is disclosed again.** The 0.5.5 note was written
+  into CHANGELOG.md and dropped from README.md, so the README a reader installs from
+  never mentioned it. There is now a "Limits and footprint" section that names
+  `gateway.session_context._SESSION_ASYNC_DELIVERY` (set by `repair.py` and
+  `demo.py` for the synchronous rerun), says it is outside the published plugin API,
+  and says a rename fails loudly instead of reporting an unverified fix. It also
+  states the demo's on-disk footprint and what it leaves behind if interrupted.
+- **README, page and incident steps: Done means quiet for good.** Core has no
+  `acked` state, `open_incidents()` never returns a closed row, and
+  `set_incident_state` refuses every transition on a closed row — so
+  `reopen_recurring()` could never fire. Nothing claimed by a test could happen.
+  The dead helper and its call in `repair.cycle()` are gone, and the copy now says
+  what core does: that exact error stays silent, and only a *different* error mints
+  a new incident. Seven tests cover it, including that no closed row can surface as
+  open and that the README keeps both disclosures.
+
 ## 0.5.5
 
 - **The demo writes into the profile you are looking at.** `demo.py` read

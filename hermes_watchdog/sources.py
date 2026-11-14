@@ -103,10 +103,12 @@ def job_exists(job_id: str) -> Optional[bool]:
 def ack(incident_id: str) -> Tuple[bool, str]:
     """Close an incident the operator has dealt with. Returns (closed, reason).
 
-    Core keeps the signature quiet until the same error returns, so this is how a
-    hand-off ends — it is the operator's counterpart to `mark_alerted`. The reason
-    is returned rather than swallowed: "it refused" without a why is the kind of
-    dead end this plugin is supposed to remove.
+    ``closed`` is terminal for that error signature in core: there is no ``acked``
+    state to move back, and ``set_incident_state`` refuses every transition on a
+    closed row. So this ends the hand-off for good — that exact error text stays
+    silent from here on, and only a *different* error mints a new incident and
+    alerts again. The reason is returned rather than swallowed: "it refused"
+    without a why is the kind of dead end this plugin is supposed to remove.
     """
     try:
         from cron import incidents as _inc  # late import
@@ -183,34 +185,6 @@ def _ago(ts: Optional[str]) -> str:
     if secs < 172800:
         return f"{int(secs // 3600)}h ago"
     return f"{int(secs // 86400)}d ago"
-
-
-def reopen_recurring() -> List[str]:
-    """Re-open incidents that were marked done and then happened again.
-
-    ``Done`` promises quiet until the same error returns. Core keeps an acked incident
-    acked, so without this a recurring failure would stay invisible forever. An acked
-    incident whose ``last_seen_at`` moved past ``acked_at`` is opened again as
-    ``detected`` so the next cycle handles it and the page shows it.
-    """
-    reopened: List[str] = []
-    for inc in open_incidents():
-        if inc.get("state") != "acked":
-            continue
-        acked, seen = inc.get("acked_at"), inc.get("last_seen_at")
-        if not acked or not seen:
-            continue
-        try:
-            from datetime import datetime
-            def _t(v):
-                return datetime.fromisoformat(str(v).replace("Z", "+00:00"))
-            if _t(seen) > _t(acked):
-                from cron import incidents as _inc
-                if _inc.set_incident_state(inc["incident_id"], "detected"):
-                    reopened.append(inc["incident_id"])
-        except Exception:  # noqa: BLE001 - a failed reopen must not stop the cycle
-            continue
-    return reopened
 
 
 def explain_incident(
@@ -295,8 +269,9 @@ def explain_incident(
         steps.append({"text": "Fix the cause, then run it once by hand", "command": f"hermes cron run {job_id}"})
         steps.append({"text": "Or stop it retrying on its own schedule", "command": f"hermes cron pause {job_id}"})
     if not self_check:
-        steps.append({"text": "Press Done on this row when you have handled it — it stays quiet "
-                              "until the same error comes back", "command": ""})
+        steps.append({"text": "Press Done on this row when you have handled it — that exact "
+                              "error stays quiet for good; a different failure comes back as a "
+                              "new row", "command": ""})
 
     if self_check:
         summary = "Watchdog's own check tripped while Hermes restarted. Nothing of yours is broken."

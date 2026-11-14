@@ -58,7 +58,7 @@ The page answers one question: is everything fine?
 | --- | --- |
 | **Everything is running as it should.** | Nothing. Repairs already ran and were verified against Hermes's own run record. |
 | **One thing needs you.** | Read one sentence about it. If you want it fixed, press **Ask Hermes to fix it** — Watchdog hands the job to the agent with the failure, the run's output and an instruction to diagnose rather than re-run. Its answer arrives in your chat. |
-| **Done** | Hides that issue and keeps it quiet — until the same error comes back, which re-opens it automatically. |
+| **Done** | Hides that issue for good. Hermes treats the ack as final for that exact error on that job, so the same text stays silent; a *different* failure comes back as a new row. |
 | A row of dots | That job's last five runs. Green finished, red failed, amber cancelled. One red dot and four greens is a blip; five reds is a real fault. |
 
 Details are folded away: "What Watchdog does", "What it did recently", and per
@@ -124,10 +124,26 @@ to notice the failure first. The plugin changes what Hermes does: it reads the
 cron store at runtime, fires jobs through the cron tool, runs playbooks on a hook,
 and renders a Desktop pane over the same report the tools return.
 
+## Limits and footprint
+
+- **The synchronous rerun touches a private name.** Verification only means
+  something if the job has actually run, so `repair.py` and `demo.py` set core's
+  `gateway.session_context._SESSION_ASYNC_DELIVERY` contextvar for the duration of
+  the call, then reset it. That module is **not part of the published plugin API**
+  and can be renamed or changed on any Hermes release; if it disappears the rerun
+  fails loudly with the ImportError instead of reporting a fix it never verified.
+- **The demo writes two things and removes both.** A no-agent cron job and an
+  executable script (mode 0755) under `$HERMES_HOME/scripts` are created, run, then
+  deleted. If Hermes stops partway through, the job and the script stay behind and
+  are named in the demo's output so you can remove them.
+- **It reads this profile's cron store and writes its own ledger** under
+  `plugin-data/hermes-watchdog/`. No network calls, no API keys, no arbitrary
+  shell: the only commands it runs are the ones you put in a playbook file.
+
 ## Development
 
 ```bash
-python -m unittest discover -s tests -v      # 55 tests, stdlib + FastAPI
+python -m unittest discover -s tests -v      # 66 tests, stdlib + FastAPI
 hermes plugins validate /path/to/hermes-watchdog --install-deps
 hermes plugins doctor /path/to/hermes-watchdog
 ```
