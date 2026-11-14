@@ -727,6 +727,25 @@ function WatchdogBody({ ctx, compact }) {
                     }))
                   })
             }),
+            jsx(Fold, {
+              title: 'See a repair happen',
+              children: jsxs('div', {
+                className: 'space-y-2',
+                children: [
+                  jsx('div', {
+                    className: 'text-xs leading-5 text-(--ui-text-tertiary)',
+                    children: 'Nothing broken? Watchdog will create a job, break it, repair it, check Hermes\'s own run record and delete it — a few seconds, on this machine, and your own jobs are untouched.'
+                  }),
+                  jsx(Button, {
+                    disabled: demoBusy,
+                    onClick: runDemo,
+                    size: 'xs',
+                    variant: 'secondary',
+                    children: demoBusy ? 'Running…' : 'Run it'
+                  })
+                ]
+              })
+            }),
             data.upstream && data.upstream.ok === false
               ? jsx('div', {
                   className: 'mt-2 text-[0.6875rem] text-(--ui-text-quaternary)',
