@@ -43,7 +43,7 @@ Most days: nothing. The plugin’s job is to leave you alone.
 | What you see | What you do |
 | --- | --- |
 | `All clear · N jobs · checked just now` | Nothing. Repairs already ran and were verified. |
-| An incident row | Open **What happened, and what to do**: the failure in plain words, what Watchdog already tried, why it stopped, and the exact commands to inspect, fix or pause that job. Press **Done** once handled. |
+| An incident row | The strip of dots shows its last five runs, so “failed once” and “failed every night since Tuesday” look different. Open **What happened, and what to do**: the failure in plain words, what Watchdog already tried, why it stopped, and the exact commands to inspect, fix or pause that job. Press **Done** once handled. |
 | A row that says **Handed to you** | Watchdog could not fix it — no playbook for that failure, or today's attempt limit is spent. The job is paused where that helps and the incident is marked `alerted` in Hermes itself. This is the only case that needs a person. |
 | **Check everything now** | Runs a check and fixes whatever it can. Nothing else to press. |
 
@@ -214,7 +214,7 @@ and renders a Desktop pane over the same report the tools return.
 ## Development
 
 ```bash
-python -m unittest discover -s tests -v      # 50 tests, stdlib + FastAPI
+python -m unittest discover -s tests -v      # 55 tests, stdlib + FastAPI
 hermes plugins validate /path/to/hermes-watchdog --install-deps
 hermes plugins doctor /path/to/hermes-watchdog
 ```

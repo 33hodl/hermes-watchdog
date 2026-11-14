@@ -170,6 +170,32 @@ function copyCommand(command) {
   }
 }
 
+const RUN_TONE = {
+  completed: 'good', success: 'good', delivered: 'good',
+  failed: 'bad', error: 'bad', timeout: 'bad',
+  cancelled: 'warn', skipped: 'muted', running: 'muted'
+}
+
+/** Five runs in order: "failed once" and "failed every night since Tuesday". */
+function RunStrip({ runs }) {
+  if (!runs || runs.length === 0) {
+    return null
+  }
+  return jsxs('div', {
+    className: 'mt-1 flex items-center gap-1',
+    children: [
+      jsx('span', {
+        className: 'text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary)',
+        children: 'last ' + runs.length + ' runs'
+      }),
+      runs.map((run, index) => jsx('span', {
+        title: (run.status || 'unknown') + (run.at ? ' · ' + new Date(run.at).toLocaleString() : ''),
+        children: jsx(StatusDot, { tone: RUN_TONE[run.status] || 'muted' })
+      }, index))
+    ]
+  })
+}
+
 function fallbackDetail(incident) {
   // Never show an incident with nothing to do about it: if the running backend
   // predates `detail`, build the same four parts here from fields we always have.
@@ -205,7 +231,7 @@ function IncidentDetail({ incident }) {
     open: incident.state === 'alerted',
     children: [
       jsx('summary', {
-        className: 'cursor-pointer select-none text-(--ui-text-quaternary) hover:text-(--ui-text-tertiary)',
+        className: 'cursor-pointer select-none rounded text-(--ui-text-quaternary) hover:text-(--ui-text-tertiary) focus-visible:ring-1 focus-visible:ring-(--ui-stroke-secondary) focus-visible:outline-none',
         children: 'What happened, and what to do'
       }),
       jsxs('div', {
@@ -276,6 +302,7 @@ function IncidentRow({ incident, onRepair, onAck, busy, compact }) {
                 className: 'mt-0.5 line-clamp-2 text-[0.6875rem] leading-4 text-(--ui-text-tertiary)',
                 children: plainCause(incident)
               }),
+          jsx(RunStrip, { runs: incident.runs }),
           jsx(IncidentDetail, { incident })
         ]
       }),
@@ -290,6 +317,15 @@ function IncidentRow({ incident, onRepair, onAck, busy, compact }) {
                 size: 'xs',
                 variant: 'secondary',
                 children: 'Try the fix again'
+              }),
+          (incident.detail && incident.detail.job_exists === false)
+            ? null
+            : jsx(Button, {
+                onClick: () => host.navigate('/cron'),
+                size: 'xs',
+                variant: 'ghost',
+                title: 'Open the Cron page to see this job and its runs',
+                children: 'Open Cron'
               }),
           jsx(Button, {
             disabled: busy,
@@ -618,6 +654,8 @@ function WatchdogBody({ ctx, compact }) {
       }),
       outcome
         ? jsxs('div', {
+            'aria-live': 'polite',
+            role: 'status',
             className: cn('mx-3 mb-2 rounded border px-2 py-1.5 text-xs leading-5',
               outcome.tone === 'good'
                 ? 'border-(--ui-stroke-secondary)/60 text-(--ui-text-secondary)'

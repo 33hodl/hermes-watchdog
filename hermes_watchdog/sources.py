@@ -306,6 +306,18 @@ def snapshot(job_id: Optional[str] = None) -> Dict[str, Any]:
             last, used = None, 0
         inc["detail"] = explain_incident(inc, by_id.get(inc.get("job_id")),
                                          last_attempt=last, attempts_today=used)
+        # Five runs in order: "failed once" and "failed every night since Tuesday"
+        # need different responses, and the strip says which one this is.
+        try:
+            from cron import executions as _ex_hist
+            rows = _ex_hist.list_executions(job_id=inc.get("job_id"), limit=5) or []
+            inc["runs"] = [
+                {"status": r.get("status") or "",
+                 "at": r.get("finished_at") or r.get("claimed_at") or ""}
+                for r in reversed(rows)
+            ]
+        except Exception:  # noqa: BLE001 - history is a nicety, never a blocker
+            inc["runs"] = []
     if job_id:
         jobs = [j for j in jobs if j["job_id"] == job_id]
 
