@@ -205,6 +205,10 @@ def explain_incident(
     seen = _ago(inc.get("last_seen_at"))
     output_file = str(inc.get("output_file") or "").strip()
 
+    # Watchdog's own sweep shows up as an incident like any other. Saying so is the
+    # difference between "something of mine is broken" and "the checker tripped".
+    self_check = "sweep" in name.lower() or "watchdog" in name.lower()
+
     what = f"{name} failed"
     if seen:
         what += f" ({seen})"
@@ -238,7 +242,10 @@ def explain_incident(
     if attempts_today:
         tried.append(f"{attempts_today} attempt{'s' if attempts_today != 1 else ''} today for this failure")
 
-    if not job_exists:
+    if self_check:
+        why = ("This is Watchdog's own check, not one of your jobs — it trips while Hermes "
+               "is restarting, so there is usually nothing to repair.")
+    elif not job_exists:
         why = "The job this came from has been deleted, so there is nothing left to re-run."
     elif last_attempt and str(last_attempt.get("outcome")) in ("escalated", "failed"):
         why = "Watchdog already tried the repair that matches this failure and it did not hold. Repeating it would fail the same way."
@@ -248,15 +255,20 @@ def explain_incident(
         why = "Today's attempts for this failure are used up; trying again would just repeat them."
 
     steps: List[Dict[str, str]] = []
-    if job_exists:
+    if self_check:
+        steps.append({"text": "Press Done — nothing of yours is affected by this one", "command": ""})
+        steps.append({"text": "If it keeps happening, look at the job itself",
+                      "command": f"hermes cron show {job_id}"})
+    elif job_exists:
         steps.append({"text": "See what this job does and when it last ran", "command": f"hermes cron show {job_id}"})
         if output_file:
             steps.append({"text": "Read the run's own output — it has the real error",
                           "command": f"tail -n 40 {output_file}"})
         steps.append({"text": "Fix the cause, then run it once by hand", "command": f"hermes cron run {job_id}"})
         steps.append({"text": "Or stop it retrying on its own schedule", "command": f"hermes cron pause {job_id}"})
-    steps.append({"text": "Press Ack on this row when you have handled it — it stays quiet until the same error comes back",
-                  "command": ""})
+    if not self_check:
+        steps.append({"text": "Press Done on this row when you have handled it — it stays quiet "
+                              "until the same error comes back", "command": ""})
 
     return {"what": what, "tried": tried, "why": why, "steps": steps,
             "output_file": output_file, "job_exists": job_exists,

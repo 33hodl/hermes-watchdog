@@ -243,6 +243,13 @@ class IncidentExplanationTests(unittest.TestCase):
         self.assertIn("did not hold", d["why"])
         self.assertIn("2 attempts today", " ".join(d["tried"]))
 
+    def test_watchdogs_own_sweep_says_it_is_not_your_job(self):
+        d = sources.explain_incident(self._inc(job_name="Silent repair sweep (cron incidents)",
+                                               job_id="ee15", error="GatewayUnavailableError"),
+                                     {"job_id": "ee15"})
+        self.assertIn("Watchdog's own check", d["why"])
+        self.assertTrue(any("nothing of yours" in s["text"].lower() for s in d["steps"]))
+
     def test_error_text_is_shown_when_hermes_recorded_it(self):
         d = sources.explain_incident(self._inc(error="ModuleNotFoundError: pandas"), {"job_id": "job-123"})
         self.assertIn("ModuleNotFoundError", d["what"])

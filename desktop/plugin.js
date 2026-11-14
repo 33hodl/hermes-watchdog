@@ -170,13 +170,36 @@ function copyCommand(command) {
   }
 }
 
+function fallbackDetail(incident) {
+  // Never show an incident with nothing to do about it: if the running backend
+  // predates `detail`, build the same four parts here from fields we always have.
+  const name = jobLabel(incident.job_name, incident.job_id)
+  const error = String(incident.error || '').trim()
+  const what = name + ' failed'
+    + (error ? ': ' + error.slice(0, 240)
+             : '. Hermes stored no error text for it — the run\'s own output is the only detail.')
+  const why = incident.job_id
+    ? 'Watchdog has no repair it can prove worked for this failure, so it will not guess.'
+    : 'The job behind this failure no longer exists, so there is nothing left to re-run.'
+  const steps = []
+  if (incident.job_id) {
+    steps.push({ text: 'See the job and when it last ran', command: 'hermes cron show ' + incident.job_id })
+    steps.push({ text: 'Fix the cause, then run it once by hand', command: 'hermes cron run ' + incident.job_id })
+    steps.push({ text: 'Or stop it retrying on its own schedule', command: 'hermes cron pause ' + incident.job_id })
+  }
+  steps.push({ text: 'Press Done when you have handled it — it stays quiet until the same error returns' })
+  return { what: what, tried: [], why: why, steps: steps }
+}
+
+function incidentDetail(incident) {
+  const detail = (incident && incident.detail) || {}
+  return detail.what ? detail : fallbackDetail(incident)
+}
+
 function IncidentDetail({ incident }) {
-  const detail = incident.detail || {}
+  const detail = incidentDetail(incident)
   const tried = detail.tried || []
   const steps = detail.steps || []
-  if (!detail.what) {
-    return null
-  }
   return jsxs('details', {
     className: 'mt-1 text-xs leading-5 text-(--ui-text-secondary)',
     open: incident.state === 'alerted',
@@ -247,10 +270,12 @@ function IncidentRow({ incident, onRepair, onAck, busy, compact }) {
               })
             ]
           }),
-          jsx('div', {
-            className: 'mt-0.5 line-clamp-2 text-[0.6875rem] leading-4 text-(--ui-text-tertiary)',
-            children: plainCause(incident)
-          }),
+          incident.detail && incident.detail.what
+            ? null
+            : jsx('div', {
+                className: 'mt-0.5 line-clamp-2 text-[0.6875rem] leading-4 text-(--ui-text-tertiary)',
+                children: plainCause(incident)
+              }),
           jsx(IncidentDetail, { incident })
         ]
       }),
@@ -285,6 +310,19 @@ const PLAIN_OUTCOME = {
   escalated: 'Handed to you',
   failed: 'Could not fix',
   running: 'Trying now'
+}
+
+/** 'Handed to you' is already the verdict; the detail should add, not repeat it. */
+function tidyDetail(repair) {
+  const detail = String(repair.detail || '').trim()
+  if (!detail) {
+    return ''
+  }
+  if (repair.outcome === 'escalated') {
+    const inner = detail.replace(/^handed to the operator\s*/i, '').replace(/^\((.*)\)$/, '$1').trim()
+    return inner === 'core incident marked alerted' ? 'marked in Hermes as needing you' : inner
+  }
+  return detail
 }
 
 function RepairRow({ repair, compact }) {
@@ -326,11 +364,11 @@ function RepairRow({ repair, compact }) {
           }),
           // The proof, not a promise: what Hermes's own record says happened.
           // This is the whole product, so it gets its own line instead of a tooltip.
-          repair.detail
+          tidyDetail(repair)
             ? jsx('div', {
                 className: 'mt-0.5 truncate text-[0.6875rem] text-(--ui-text-quaternary)',
-                title: repair.detail,
-                children: repair.detail
+                title: tidyDetail(repair),
+                children: tidyDetail(repair)
               })
             : null
         ]
@@ -412,12 +450,24 @@ function WatchdogBody({ ctx, compact }) {
     }
 
     host.notify({ kind: failed > 0 ? 'warning' : 'success', message })
+    setOutcome({
+      at: Date.now(),
+      text: message,
+      tone: failed > 0 || escalated + skipped > 0 ? 'warn' : 'good',
+      next: fixed + failed + escalated + skipped + stale === 0
+        ? 'Nothing else to do.'
+        : (escalated + skipped > 0
+            ? 'The rows below say what broke, what was tried and what to do about each one.'
+            : 'Everything it tried, it could prove worked.')
+    })
     client.invalidateQueries({ queryKey: KEY })
   }
 
   // A fresh install has an empty repair list, so the pane proves nothing. This runs
   // the real loop on a real throwaway job and reports what Hermes recorded.
   const [demoBusy, setDemoBusy] = useState(false)
+  // A toast disappears; the answer to "what now?" has to stay on the page.
+  const [outcome, setOutcome] = useState(null)
   const runDemo = async () => {
     if (!ctx || !ctx.rest || demoBusy) {
       return
@@ -432,10 +482,23 @@ function WatchdogBody({ ctx, compact }) {
         kind: 'success',
         message: 'Watchdog fixed a job it broke on purpose: ' + (result.detail || 'verified by Hermes')
       })
+      setOutcome({
+        at: Date.now(),
+        text: 'Demo: created a throwaway job, broke it, repaired it, checked Hermes\'s own run record, deleted it — '
+          + (result.detail || 'verified by Hermes'),
+        tone: 'good',
+        next: 'Your own jobs were not touched. That is the whole loop a real incident goes through.'
+      })
     } else {
       host.notify({
         kind: 'warning',
         message: 'The demo repair did not verify: ' + ((result && result.detail) || 'no reason returned')
+      })
+      setOutcome({
+        at: Date.now(),
+        text: 'Demo repair did not verify: ' + ((result && result.detail) || 'no reason returned'),
+        tone: 'warn',
+        next: 'That is the honest case — Watchdog reports it instead of claiming a fix.'
       })
     }
     client.invalidateQueries({ queryKey: KEY })
@@ -449,6 +512,12 @@ function WatchdogBody({ ctx, compact }) {
     const result = await ctx
       .rest('/ack', { body: { incident_id: incidentId }, method: 'POST' })
       .catch(thrown => ({ error: String(thrown) }))
+
+    setOutcome(result && result.closed
+      ? { at: Date.now(), text: 'Marked done — the row is gone and stays quiet unless the same error returns',
+          tone: 'good', next: 'Nothing else to do for it.' }
+      : { at: Date.now(), text: 'Could not close it: ' + ((result && result.reason) || 'no reason returned'),
+          tone: 'warn', next: 'The row stays open so the failure is not lost.' })
 
     host.notify({
       kind: result && result.closed ? 'success' : 'warning',
@@ -547,6 +616,20 @@ function WatchdogBody({ ctx, compact }) {
           })
         ]
       }),
+      outcome
+        ? jsxs('div', {
+            className: cn('mx-3 mb-2 rounded border px-2 py-1.5 text-xs leading-5',
+              outcome.tone === 'good'
+                ? 'border-(--ui-stroke-secondary)/60 text-(--ui-text-secondary)'
+                : 'border-(--ui-text-warning)/40 text-(--ui-text-secondary)'),
+            children: [
+              jsx('div', { children: outcome.text }),
+              outcome.next
+                ? jsx('div', { className: 'mt-0.5 text-[0.6875rem] text-(--ui-text-tertiary)', children: outcome.next })
+                : null
+            ]
+          })
+        : null,
       jsx(ScrollArea, {
         className: 'min-h-0 flex-1',
         children: jsxs('div', {
