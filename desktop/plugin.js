@@ -109,6 +109,14 @@ function relative(ts) {
   return Math.round(seconds / 86400) + 'd ago'
 }
 
+function absolute(ts) {
+  if (!ts) {
+    return ''
+  }
+  const at = new Date(Number(ts) * 1000)
+  return Number.isNaN(at.getTime()) ? '' : at.toLocaleString()
+}
+
 function useWatchdog(ctx) {
   return useQuery({
     enabled: Boolean(ctx && ctx.rest),
@@ -146,6 +154,22 @@ function Chip({ ctx }) {
   })
 }
 
+function copyCommand(command) {
+  const text = String(command || '')
+  const done = () => {
+    try {
+      host.notify({ kind: 'success', message: 'Copied: ' + text })
+    } catch (_) {
+      // a missing notifier must not break the row
+    }
+  }
+  try {
+    navigator.clipboard.writeText(text).then(done, done)
+  } catch (_) {
+    done()
+  }
+}
+
 function IncidentDetail({ incident }) {
   const detail = incident.detail || {}
   const tried = detail.tried || []
@@ -154,7 +178,7 @@ function IncidentDetail({ incident }) {
     return null
   }
   return jsxs('details', {
-    className: 'mt-1 text-[0.6875rem] leading-4 text-(--ui-text-tertiary)',
+    className: 'mt-1 text-xs leading-5 text-(--ui-text-secondary)',
     open: incident.state === 'alerted',
     children: [
       jsx('summary', {
@@ -186,8 +210,11 @@ function IncidentDetail({ incident }) {
                   children: [
                     jsx('span', { children: step.text }),
                     step.command
-                      ? jsx('code', {
-                          className: 'ml-1 rounded bg-(--ui-stroke-secondary)/30 px-1 py-0.5 font-mono text-[0.625rem] text-(--ui-text-secondary)',
+                      ? jsx('button', {
+                          className: 'ml-1 cursor-pointer rounded bg-(--ui-stroke-secondary)/30 px-1 py-0.5 font-mono text-[0.6875rem] text-(--ui-text-secondary) hover:text-(--ui-text-primary)',
+                          title: 'Click to copy',
+                          type: 'button',
+                          onClick: () => copyCommand(step.command),
                           children: step.command
                         })
                       : null
@@ -244,8 +271,8 @@ function IncidentRow({ incident, onRepair, onAck, busy, compact }) {
             onClick: () => onAck(incident.incident_id),
             size: 'xs',
             variant: 'ghost',
-            title: 'Close this incident — it stays quiet unless the same error comes back',
-            children: 'Ack'
+            title: 'Mark this handled — it stays quiet unless the same error comes back',
+            children: 'Done'
           })
         ]
       })
@@ -287,6 +314,7 @@ function RepairRow({ repair, compact }) {
                 : null,
               jsx('span', {
                 className: 'shrink-0 text-[0.6875rem] text-(--ui-text-quaternary)',
+                title: absolute(repair.started_at),
                 children: relative(repair.started_at)
               })
             ]
@@ -433,6 +461,13 @@ function WatchdogBody({ ctx, compact }) {
     client.invalidateQueries({ queryKey: KEY })
   }
 
+  if (!data && !error) {
+    return jsx('div', {
+      className: 'px-3 py-3 text-xs text-(--ui-text-tertiary)',
+      children: 'Checking your scheduled jobs…'
+    })
+  }
+
   if (error) {
     return jsxs('div', {
       className: 'p-4 text-xs text-(--ui-text-tertiary)',
@@ -472,9 +507,12 @@ function WatchdogBody({ ctx, compact }) {
           }),
           jsx('span', {
             className: 'text-[0.6875rem] text-(--ui-text-tertiary)',
-            children: (incidents.length === 0
-              ? (counts.jobs || 0) + ' jobs'
-              : incidents.length + ' of ' + (counts.jobs || 0) + ' jobs')
+            children: (counts.jobs === 0
+              ? 'no jobs yet'
+              : incidents.length === 0
+                ? (counts.jobs || 0) + ' jobs watched'
+                : incidents.length + (incidents.length === 1 ? ' needs you' : ' need you')
+                  + ' · ' + (counts.jobs || 0) + ' jobs watched')
               + (data.last_cycle && !data.last_cycle.dry_run
                 ? ' · ' + checked(data.last_cycle.checked_at)
                 : '')
@@ -513,10 +551,22 @@ function WatchdogBody({ ctx, compact }) {
         className: 'min-h-0 flex-1',
         children: jsxs('div', {
           children: [
-            jsx(SectionLabel, { children: 'Open incidents' }),
+            (counts.jobs || 0) === 0 && incidents.length === 0
+              ? jsxs('div', {
+                  className: 'px-3 pt-3 pb-1',
+                  children: [
+                    jsx(EmptyState, { title: 'No scheduled jobs yet' }),
+                    jsx('div', {
+                      className: 'mt-1 text-xs text-(--ui-text-tertiary)',
+                      children: 'Create a cron job and Watchdog starts watching it: it runs the repair that matches the failure, then checks Hermes\'s own record to see whether the next run worked.'
+                    })
+                  ]
+                })
+              : null,
             incidents.length === 0
-              ? jsx(EmptyState, { title: 'Nothing to fix' })
-              : incidents.map(incident =>
+              ? null
+              : jsx(SectionLabel, { children: incidents.length === 1 ? '1 job needs you' : incidents.length + ' jobs need you' }),
+            incidents.map(incident =>
                   jsx(IncidentRow, {
                     busy: isFetching,
                     compact,
