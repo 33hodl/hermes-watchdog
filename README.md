@@ -7,6 +7,17 @@ you. Hermes Watchdog notices, tries the fix that fits the failure, then checks
 whether the next run actually worked. You only hear about it when the fix didn't
 take.
 
+Three things it does that a prompt or a skill cannot:
+
+- **Proves the repair.** A fix counts only when Hermes's own incident and execution
+  records agree it worked — the plugin cannot claim success for itself.
+- **Asks the agent, not you.** When a repair would be a guess, one button hands the
+  job to Hermes with the failure and its output attached, and the agent's answer
+  lands in your chat.
+- **Stays bounded.** Four verbs (rerun, pause, check, escalate), a daily attempt
+  budget per incident, and no arbitrary shell — it cannot become a second failure
+  mode.
+
 ```bash
 # from the catalog — tracks the catalog pin, so `hermes update` keeps it current
 hermes plugins install hermes-watchdog
