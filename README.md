@@ -25,6 +25,9 @@ hermes plugins install hermes-watchdog
 # before it is merged, or to pin one exact version:
 # installs like this are *held* — only `hermes plugins update hermes-watchdog` moves them
 hermes plugins install 33hodl/hermes-watchdog --ref <commit-sha> --enable
+# a version that adds a route needs one gateway restart — Hermes mounts
+# plugin API routers when it starts
+hermes gateway restart
 ```
 
 **Demo (60s):** https://x.com/DiamondHandsDig/status/2119784656522588328

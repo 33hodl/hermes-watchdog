@@ -21,7 +21,7 @@ import {
   useQuery,
   useQueryClient
 } from '@hermes/plugin-sdk'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { jsx, jsxs } from 'react/jsx-runtime'
 
 const ROUTES_AREA = 'routes'
@@ -476,6 +476,25 @@ function WatchdogBody({ ctx, compact }) {
   // A toast disappears; the answer to "what now?" has to stay on the page.
   const [outcome, setOutcome] = useState(null)
   const [busyId, setBusyId] = useState(null)
+  const [routesStale, setRoutesStale] = useState(false)
+
+  // A plugin version that adds a route needs ONE gateway restart: Hermes mounts
+  // plugin API routers when it starts. Probe with an id that cannot exist, so this
+  // is a no-op on a current gateway and an honest warning on a stale one.
+  useEffect(() => {
+    let cancelled = false
+    if (!ctx || !ctx.rest) {
+      return () => {}
+    }
+    ctx.rest('/handoff', { body: { incident_id: '__probe__' }, method: 'POST' })
+      .then(result => { if (!cancelled) setRoutesStale(false) })
+      .catch(thrown => {
+        if (!cancelled && String(thrown).includes('404')) {
+          setRoutesStale(true)
+        }
+      })
+    return () => { cancelled = true }
+  }, [])
   const runDemo = async () => {
     if (!ctx || !ctx.rest || demoBusy) {
       return
@@ -585,8 +604,12 @@ function WatchdogBody({ ctx, compact }) {
           text: 'Hermes is on it — it is diagnosing that job now, and its answer arrives here as a message.',
           next: 'Nothing else is needed from you.' }
       : { at: Date.now(), tone: 'warn',
-          text: 'Could not hand it to Hermes: ' + ((result && result.error) || 'no reason returned'),
-          next: 'The issue stays open, so nothing is lost.' })
+          text: String((result && result.error) || '').includes('404')
+            ? 'This needs one gateway restart to load (the button is new in this version).'
+            : 'Could not hand it to Hermes: ' + ((result && result.error) || 'no reason returned'),
+          next: String((result && result.error) || '').includes('404')
+            ? 'Run: hermes gateway restart — then press again. The issue stays open until then.'
+            : 'The issue stays open, so nothing is lost.' })
     client.invalidateQueries({ queryKey: KEY })
   }
 
@@ -636,6 +659,21 @@ function WatchdogBody({ ctx, compact }) {
               })
             ]
           }),
+          routesStale
+            ? jsxs('div', {
+                className: 'mt-2 rounded border border-(--ui-text-warning)/40 px-2 py-1.5 text-xs leading-5 text-(--ui-text-secondary)',
+                children: [
+                  jsx('div', { children: 'Hermes is still serving the previous version of this plugin, so the fix button cannot work yet. One restart loads it:' }),
+                  jsx('button', {
+                    className: 'mt-1 cursor-pointer rounded bg-(--ui-stroke-secondary)/30 px-1 py-0.5 font-mono text-[0.6875rem] text-(--ui-text-secondary) hover:text-(--ui-text-primary)',
+                    onClick: () => copyCommand('hermes gateway restart'),
+                    title: 'Click to copy',
+                    type: 'button',
+                    children: 'hermes gateway restart'
+                  })
+                ]
+              })
+            : null,
           outcome
             ? jsxs('div', {
                 'aria-live': 'polite',
