@@ -226,9 +226,10 @@ def explain_incident(
         line = f"Watchdog {did}"
         if happened:
             line += f" {happened}"
+        already_said_handover = "escalate" in verbs
         if outcome == "repaired":
             line += " — it looked fixed, then failed again"
-        elif outcome == "escalated":
+        elif outcome == "escalated" and not already_said_handover:
             line += " — and handed it to you"
         elif outcome == "failed":
             line += " — the repair did not hold"
