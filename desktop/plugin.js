@@ -24,7 +24,7 @@ import {
 import { useEffect, useState } from 'react'
 import { jsx, jsxs } from 'react/jsx-runtime'
 
-const BUILD = '0.9.3'
+const BUILD = '0.9.4'
 const ROUTES_AREA = 'routes'
 const SIDEBAR_NAV_AREA = 'sidebar.nav'
 const PAGE_PATH = '/watchdog'
@@ -412,6 +412,8 @@ function WatchdogBody({ ctx, compact }) {
   const client = useQueryClient()
   const { data, error, isFetching, refetch } = useWatchdog(ctx)
 
+  const routesProven = () => setRoutesStale(false)
+
   const run = async (jobId, dryRun) => {
     if (!ctx || !ctx.rest) {
       return
@@ -468,6 +470,7 @@ function WatchdogBody({ ctx, compact }) {
             ? 'The rows below say what broke, what was tried and what to do about each one.'
             : 'Everything it tried, it could prove worked.')
     })
+    routesProven()
     client.invalidateQueries({ queryKey: KEY })
   }
 
@@ -487,11 +490,13 @@ function WatchdogBody({ ctx, compact }) {
     if (!ctx || !ctx.rest) {
       return () => {}
     }
-    ctx.rest('/handoff', { body: { incident_id: '__probe__' }, method: 'POST' })
-      .then(result => { if (!cancelled) setRoutesStale(false) })
+    ctx.rest('/runbooks')
+      .then(() => { if (!cancelled) setRoutesStale(false) })
       .catch(thrown => {
         if (!cancelled && String(thrown).includes('404')) {
           setRoutesStale(true)
+        } else if (!cancelled) {
+          setRoutesStale(false)
         }
       })
     return () => { cancelled = true }
