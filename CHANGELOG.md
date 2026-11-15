@@ -3,6 +3,12 @@
 Everything here was found by running the plugin on a real Desktop client, not by
 reading the code. Each fix is one behaviour that made a click look like a no-op.
 
+## 0.9.6
+
+- **The manifest version is correct again.** 0.9.5 shipped `plugin.yaml` at `0.5.6` while its
+  tag and catalog entry said 0.9.5, so an install displayed a number lower than the
+  version it replaced. No code changed.
+
 ## 0.5.6
 
 - **README: the private contextvar is disclosed again.** The 0.5.5 note was written
