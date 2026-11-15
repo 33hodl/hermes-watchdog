@@ -3,6 +3,13 @@
 Everything here was found by running the plugin on a real Desktop client, not by
 reading the code. Each fix is one behaviour that made a click look like a no-op.
 
+## 0.10.1
+
+- **The version in the footer is the real version.** It came from a constant inside
+  `plugin.js`, which drifted: an install of 0.10.0 still printed `watchdog 0.9.4`. The page
+  now prints `version` from `/status`, read out of `plugin.yaml`, and a test fails if the
+  JS constant and the manifest disagree. No behaviour change.
+
 ## 0.10.0
 
 - **Every row says which button ends it.** A card now carries one line of instruction:

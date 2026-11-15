@@ -24,7 +24,7 @@ import {
 import { useEffect, useState } from 'react'
 import { jsx, jsxs } from 'react/jsx-runtime'
 
-const BUILD = '0.9.4'
+const BUILD = '0.10.1'  // fallback only: the page prints the gateway's own version when it answers
 const ROUTES_AREA = 'routes'
 const SIDEBAR_NAV_AREA = 'sidebar.nav'
 const PAGE_PATH = '/watchdog'
@@ -825,7 +825,7 @@ function WatchdogBody({ ctx, compact }) {
               : null,
             jsx('div', {
               className: 'mt-3 text-right text-[0.625rem] text-(--ui-text-quaternary)',
-              children: 'watchdog ' + BUILD
+              children: 'watchdog ' + ((data && data.version) || BUILD)
             })
           ]
         })

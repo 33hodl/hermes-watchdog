@@ -547,6 +547,22 @@ class HandoffTests(unittest.TestCase):
         self.assertIn("Press Clear", snap["incidents"][0]["detail"]["next"])
 
 
+class VersionHonestyTests(unittest.TestCase):
+    def test_the_page_prints_the_manifest_version(self):
+        # The footer used to come from a constant in plugin.js, so an install could
+        # display a version older than the one it replaced.
+        from pathlib import Path as _Path
+        manifest = (_Path(__file__).resolve().parent.parent / "plugin.yaml").read_text()
+        self.assertEqual(sources.plugin_version(), manifest.split("version: ")[1].split()[0])
+
+    def test_the_desktop_build_constant_matches_the_manifest(self):
+        from pathlib import Path as _Path
+        js = (_Path(__file__).resolve().parent.parent / "desktop" / "plugin.js").read_text()
+        build = js.split("const BUILD = '")[1].split("'")[0]
+        self.assertEqual(build, sources.plugin_version(),
+                         "plugin.js BUILD and plugin.yaml version must agree")
+
+
 class SnapshotTests(unittest.TestCase):
     def test_upstream_failure_is_reported_not_hidden(self):
         with patch.object(sources, "_jobs", side_effect=RuntimeError("moved")), \

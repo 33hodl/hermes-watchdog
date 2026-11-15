@@ -296,6 +296,22 @@ def explain_incident(
             "output_file": output_file, "job_exists": job_exists,
             "last_seen_at": inc.get("last_seen_at") or ""}
 
+def plugin_version() -> str:
+    """The version this build actually is, read from its own manifest.
+
+    The page used to print a constant in plugin.js, which drifted: installs showed
+    0.9.4 while the manifest said 0.10.0. One source of truth, or a label that lies.
+    """
+    import re
+    from pathlib import Path as _Path
+    try:
+        text = (_Path(__file__).resolve().parent.parent / "plugin.yaml").read_text()
+    except OSError:
+        return "unknown"
+    match = re.search(r"^version:\s*(\S+)\s*$", text, re.M)
+    return match.group(1) if match else "unknown"
+
+
 def snapshot(job_id: Optional[str] = None) -> Dict[str, Any]:
     """Full read-only picture: jobs, open incidents, and whether upstream answered.
 
@@ -352,6 +368,7 @@ def snapshot(job_id: Optional[str] = None) -> Dict[str, Any]:
         health = "ok"
     return {
         "health": health,
+        "version": plugin_version(),
         "counts": {
             "jobs": len(jobs),
             "failing_jobs": len(failing),
