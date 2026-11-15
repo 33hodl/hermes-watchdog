@@ -3,6 +3,20 @@
 Everything here was found by running the plugin on a real Desktop client, not by
 reading the code. Each fix is one behaviour that made a click look like a no-op.
 
+## 0.10.0
+
+- **Every row says which button ends it.** A card now carries one line of instruction:
+  "Press Ask Hermes to fix it… or Done" for a job that broke, "Press Clear…" for a row that
+  is only noise. The person no longer has to infer it.
+- **Watchdog's own check no longer counts as something that needs you.** Incidents whose job
+  does not exist, or whose failure is Watchdog's own check tripping during a restart, are
+  listed under "Nothing of yours is broken here" with a Clear button, and are excluded from
+  the headline, the status-bar chip and `counts.needs_you` (`counts.self_checks` counts them).
+- **One card per job.** Core mints an incident per error signature, so one job failing twice
+  produced two identical-looking cards; cards are now grouped by job and Done closes every
+  incident in the group.
+- 67 tests.
+
 ## 0.9.6
 
 - **The manifest version is correct again.** 0.9.5 shipped `plugin.yaml` at `0.5.6` while its

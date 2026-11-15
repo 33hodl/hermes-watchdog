@@ -519,14 +519,32 @@ class HandoffTests(unittest.TestCase):
             self.assertFalse(sources.mark_alerted("inc-1"))
 
     def test_needs_you_counts_alerted_incidents(self):
+        # A job that still exists is the person's to fix or hand over.
         rows = [
             {"id": "a", "job_id": "j", "state": "detected", "failure_type": "script"},
             {"id": "b", "job_id": "j", "state": "alerted", "failure_type": "unknown"},
         ]
-        with patch.object(sources, "_incidents", return_value=rows):
+        jobs = [{"id": "j", "name": "nightly", "enabled": True, "schedule": "0 3 * * *"}]
+        with patch.object(sources, "_incidents", return_value=rows), \
+                patch.object(sources, "_jobs", return_value=jobs):
             snap = sources.snapshot()
         self.assertEqual(snap["counts"]["open_incidents"], 2)
         self.assertEqual(snap["counts"]["needs_you"], 1)
+        self.assertEqual(snap["incidents"][0]["detail"]["action"], "repair")
+        self.assertIn("Ask Hermes", snap["incidents"][0]["detail"]["next"])
+
+    def test_watchdogs_own_check_is_not_something_that_needs_you(self):
+        # A restart makes Watchdog's own check trip. Counting that as work for a
+        # person is how a page trains its reader to ignore it.
+        rows = [{"id": "c", "job_id": "gone", "state": "alerted", "failure_type": "script",
+                 "job_name": "Hermes Startup Site Contrast & Cache Watchdog"}]
+        with patch.object(sources, "_incidents", return_value=rows), \
+                patch.object(sources, "_jobs", return_value=[]):
+            snap = sources.snapshot()
+        self.assertEqual(snap["counts"]["needs_you"], 0)
+        self.assertEqual(snap["counts"]["self_checks"], 1)
+        self.assertEqual(snap["incidents"][0]["detail"]["action"], "clear")
+        self.assertIn("Press Clear", snap["incidents"][0]["detail"]["next"])
 
 
 class SnapshotTests(unittest.TestCase):

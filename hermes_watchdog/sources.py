@@ -284,7 +284,15 @@ def explain_incident(
     else:
         summary = "Today's automatic attempts are used up, and the failure is still there."
 
-    return {"summary": summary, "what": what, "tried": tried, "why": why, "steps": steps,
+    action = ("clear" if (self_check or not job_exists) else "repair")
+    # The page must never make a person guess which button applies.
+    nxt = (
+        "Press Clear. It only hides this row; nothing about your jobs changes."
+        if action == "clear"
+        else "Press Ask Hermes to fix it. If you have already dealt with it yourself, press Done."
+    )
+    return {"action": action, "next": nxt, "summary": summary, "what": what, "tried": tried,
+            "why": why, "steps": steps,
             "output_file": output_file, "job_exists": job_exists,
             "last_seen_at": inc.get("last_seen_at") or ""}
 
@@ -348,7 +356,11 @@ def snapshot(job_id: Optional[str] = None) -> Dict[str, Any]:
             "jobs": len(jobs),
             "failing_jobs": len(failing),
             "open_incidents": len(incidents),
-            "needs_you": sum(1 for i in incidents if i.get("state") == "alerted"),
+            "needs_you": sum(1 for i in incidents
+                             if i.get("state") == "alerted"
+                             and (i.get("detail") or {}).get("action") != "clear"),
+            "self_checks": sum(1 for i in incidents
+                               if (i.get("detail") or {}).get("action") == "clear"),
         },
         "jobs": jobs,
         "incidents": incidents,

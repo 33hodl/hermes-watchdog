@@ -112,7 +112,7 @@ function useWatchdog(ctx) {
 
 function Chip({ ctx }) {
   const { data } = useWatchdog(ctx)
-  const incidents = (data && data.counts && data.counts.open_incidents) || 0
+  const incidents = (data && data.counts && data.counts.needs_you) || 0
   const health = (data && data.health) || 'unknown'
 
   // Clickable: the chip is the one surface present on every layout, so it is the
@@ -364,8 +364,10 @@ function Fold({ title, children }) {
 }
 
 /** One thing that needs a person: one sentence, two buttons, nothing else. */
-function IssueCard({ incident, onAsk, onAck, busy }) {
+function IssueCard({ group, onAsk, onAck, busy }) {
+  const incident = group.primary
   const detail = incidentDetail(incident)
+  const clearOnly = detail.action === 'clear'
   const label = String(incident.job_name || '').toLowerCase().includes('sweep')
     ? "Watchdog's own check"
     : jobLabel(incident.job_name, incident.job_id)
@@ -375,6 +377,9 @@ function IssueCard({ incident, onAsk, onAck, busy }) {
     children: [
       jsx('div', { className: 'text-sm font-medium text-(--ui-text-primary)', children: label }),
       jsx('div', { className: 'mt-1 text-xs leading-5 text-(--ui-text-secondary)', children: detail.summary }),
+      detail.next
+        ? jsx('div', { className: 'mt-1 text-xs leading-5 text-(--ui-text-secondary) font-medium', children: detail.next })
+        : null,
       seenAt
         ? jsx('div', {
             className: 'mt-0.5 text-[0.6875rem] text-(--ui-text-quaternary)',
@@ -386,21 +391,32 @@ function IssueCard({ incident, onAsk, onAck, busy }) {
       jsxs('div', {
         className: 'mt-2.5 flex flex-wrap items-center gap-1.5',
         children: [
-          jsx(Button, {
-            disabled: busy,
-            onClick: () => onAsk(incident),
-            size: 'xs',
-            variant: 'default',
-            children: busy ? 'Asking Hermes…' : 'Ask Hermes to fix it'
-          }),
-          jsx(Button, {
-            disabled: busy,
-            onClick: () => onAck(incident.incident_id),
-            size: 'xs',
-            variant: 'ghost',
-            title: 'Hide this error for this job, for good',
-            children: 'Done'
-          })
+          clearOnly
+            ? jsx(Button, {
+                disabled: busy,
+                onClick: () => onAck(group.ids),
+                size: 'xs',
+                variant: 'default',
+                title: 'Nothing of yours is affected — press to clear it',
+                children: 'Clear this'
+              })
+            : jsx(Button, {
+                disabled: busy,
+                onClick: () => onAsk(incident),
+                size: 'xs',
+                variant: 'default',
+                children: busy ? 'Asking Hermes…' : 'Ask Hermes to fix it'
+              }),
+          clearOnly
+            ? null
+            : jsx(Button, {
+                disabled: busy,
+                onClick: () => onAck(group.ids),
+                size: 'xs',
+                variant: 'ghost',
+                title: 'I have handled this one myself',
+                children: 'Done'
+              })
         ]
       }),
       jsx(IncidentDetail, { incident })
@@ -590,6 +606,12 @@ function WatchdogBody({ ctx, compact }) {
     })
   }
 
+  const ackMany = async ids => {
+    for (const id of ids || []) {
+      await ack(id)
+    }
+  }
+
   const health = data.health || 'unknown'
   const incidents = data.incidents || []
   const repairs = data.recent_repairs || []
@@ -619,7 +641,21 @@ function WatchdogBody({ ctx, compact }) {
     client.invalidateQueries({ queryKey: KEY })
   }
 
-  const needsYou = incidents.length
+  // Two kinds of row, two kinds of answer: a job that broke is yours to fix or
+  // hand over; Watchdog tripping over its own restart is yours only to clear.
+  const selfChecks = incidents.filter(i => incidentDetail(i).action === 'clear')
+  const jobIncidents = incidents.filter(i => incidentDetail(i).action !== 'clear')
+  const groups = []
+  for (const incident of jobIncidents) {
+    const found = groups.find(g => g.primary.job_id === incident.job_id)
+    if (found) {
+      found.ids.push(incident.incident_id)
+    } else {
+      groups.push({ primary: incident, ids: [incident.incident_id] })
+    }
+  }
+  const jobGroups = groups
+  const needsYou = groups.length
   const headline = (counts.jobs || 0) === 0
     ? 'No scheduled jobs yet.'
     : needsYou === 0
@@ -703,13 +739,42 @@ function WatchdogBody({ ctx, compact }) {
         children: jsxs('div', {
           className: 'px-4 py-3',
           children: [
-            incidents.map(incident => jsx(IssueCard, {
-              busy: busyId === incident.incident_id,
-              incident,
-              key: incident.incident_id,
-              onAck: ack,
+            jobGroups.map(group => jsx(IssueCard, {
+              busy: busyId === group.primary.incident_id,
+              group,
+              key: group.primary.job_id,
+              onAck: ackMany,
               onAsk: askHermes
             })),
+            selfChecks.length
+              ? jsxs('div', {
+                  className: 'mb-3 rounded-lg border border-(--ui-stroke-secondary)/50 px-3 py-2',
+                  children: [
+                    jsx('div', {
+                      className: 'text-xs leading-5 text-(--ui-text-tertiary)',
+                      children: 'Nothing of yours is broken here. These rows are noise, not work.'
+                    }),
+                    ...selfChecks.map(incident => jsxs('div', {
+                      className: 'mt-1.5 flex items-start gap-2',
+                      children: [
+                        jsxs('div', {
+                          className: 'min-w-0 flex-1 text-xs leading-5 text-(--ui-text-quaternary)',
+                          children: [
+                            jsx('div', { children: incidentDetail(incident).summary }),
+                            jsx('div', { children: 'Press Clear to hide it. Nothing about your jobs changes.' })
+                          ]
+                        }),
+                        jsx(Button, {
+                          onClick: () => ackMany([incident.incident_id]),
+                          size: 'xs',
+                          variant: 'ghost',
+                          children: 'Clear'
+                        })
+                      ]
+                    }))
+                  ]
+                })
+              : null,
             jsx(Fold, {
               title: 'What Watchdog does',
               children: jsxs('div', {
