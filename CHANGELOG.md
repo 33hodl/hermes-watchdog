@@ -3,6 +3,10 @@
 Everything here was found by running the plugin on a real Desktop client, not by
 reading the code. Each fix is one behaviour that made a click look like a no-op.
 
+## Unreleased (docs)
+
+- `docs/ui-page.png` shows the 0.10.1 page. No code change.
+
 ## 0.10.1
 
 - **The version in the footer is the real version.** It came from a constant inside
